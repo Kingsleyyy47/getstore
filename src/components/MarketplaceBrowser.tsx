@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { formatNaira, type DeliveredCredentials } from "@/lib/types";
+import EmptyState from "@/components/EmptyState";
+import { IconStore } from "@/components/icons";
 
 interface TemplateItem {
   id: string;
@@ -48,10 +50,13 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
         </div>
       )}
 
+      {list.length === 0 && (
+        <div className="card">
+          <EmptyState icon={<IconStore />} title="No products available yet" body="Check back soon for new listings." />
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {list.length === 0 && (
-          <p className="text-sm text-[var(--text-muted)]">No products available yet.</p>
-        )}
         {list.map((t) => (
           <div key={t.id} className="card flex flex-col justify-between p-6">
             <div>

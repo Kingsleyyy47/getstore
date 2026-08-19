@@ -1,13 +1,16 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatNaira, type Rental, type WalletTransaction } from "@/lib/types";
-import OrderRevealButton from "@/components/OrderRevealButton";
+import { formatNaira, type Rental } from "@/lib/types";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
+import { IconReceipt, IconPhone, IconStore, IconChevronRight } from "@/components/icons";
 
 export default async function LogsPage() {
   const profile = await requireUser();
   const supabase = createClient();
 
-  const [{ data: rentals }, { data: orders }, { data: txs }] = await Promise.all([
+  const [{ data: rentals }, { data: orders }] = await Promise.all([
     supabase
       .from("rentals")
       .select("*")
@@ -20,32 +23,33 @@ export default async function LogsPage() {
       .eq("user_id", profile.id)
       .order("created_at", { ascending: false })
       .limit(50),
-    supabase
-      .from("wallet_transactions")
-      .select("*")
-      .eq("user_id", profile.id)
-      .order("created_at", { ascending: false })
-      .limit(50),
   ]);
 
   const rentalList = (rentals ?? []) as Rental[];
   const orderList = orders ?? [];
-  const txList = (txs ?? []) as WalletTransaction[];
 
   return (
     <div className="space-y-10">
-      <div>
-        <h1 className="text-2xl font-bold">Logs</h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          Your full history: number rentals, marketplace orders, and wallet activity.
-        </p>
-      </div>
+      <PageHeader
+        icon={<IconReceipt />}
+        title="History"
+        subtitle={
+          <>
+            Your history of purchases — every number rented and every marketplace order. Looking
+            for wallet transactions?{" "}
+            <Link href="/dashboard/wallet" className="text-brand hover:underline">
+              Visit your Wallet
+            </Link>
+            .
+          </>
+        }
+      />
 
       <section>
-        <h2 className="mb-3 text-lg font-bold">Number rentals</h2>
+        <h2 className="mb-3 text-lg font-bold">Number History</h2>
         <div className="card divide-y divide-[var(--border)]">
           {rentalList.length === 0 && (
-            <p className="p-6 text-sm text-[var(--text-muted)]">No rentals yet.</p>
+            <EmptyState icon={<IconPhone />} title="No rentals yet" body="Numbers you rent will show up here." />
           )}
           {rentalList.map((r) => (
             <div
@@ -58,8 +62,12 @@ export default async function LogsPage() {
                   {r.country ? ` · ${r.country}` : ""} &middot; +{r.phone}
                 </div>
                 <div className="text-[var(--text-muted)]">
-                  {r.provider === "daisysim" ? "All Countries" : "Numbers"} &middot;{" "}
-                  {new Date(r.created_at).toLocaleString()}
+                  {r.provider === "daisysim"
+                    ? "All Countries"
+                    : r.provider === "daisysim2"
+                      ? "US Only"
+                      : "USA & Canada"}{" "}
+                  &middot; {new Date(r.created_at).toLocaleString()}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -73,15 +81,16 @@ export default async function LogsPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-bold">Marketplace orders</h2>
+        <h2 className="mb-3 text-lg font-bold">Purchase History</h2>
         <div className="card divide-y divide-[var(--border)]">
           {orderList.length === 0 && (
-            <p className="p-6 text-sm text-[var(--text-muted)]">No marketplace purchases yet.</p>
+            <EmptyState icon={<IconStore />} title="No purchases yet" body="Marketplace orders will show up here." />
           )}
           {orderList.map((o: any) => (
-            <div
+            <Link
               key={o.id}
-              className="flex flex-col gap-2 px-4 py-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6"
+              href={`/dashboard/orders/${o.id}`}
+              className="flex flex-col gap-2 px-4 py-4 text-sm hover:bg-black/5 dark:hover:bg-white/5 sm:flex-row sm:items-center sm:justify-between sm:px-6"
             >
               <div className="min-w-0 break-words">
                 <div className="font-semibold">{o.product_templates?.name ?? "Product"}</div>
@@ -89,34 +98,10 @@ export default async function LogsPage() {
                   {formatNaira(o.price_cents)} &middot; {new Date(o.created_at).toLocaleString()}
                 </div>
               </div>
-              <OrderRevealButton orderId={o.id} />
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-lg font-bold">Wallet activity</h2>
-        <div className="card divide-y divide-[var(--border)]">
-          {txList.length === 0 && (
-            <p className="p-6 text-sm text-[var(--text-muted)]">No transactions yet.</p>
-          )}
-          {txList.map((t) => (
-            <div
-              key={t.id}
-              className="flex flex-col gap-2 px-4 py-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6"
-            >
-              <div className="min-w-0 break-words">
-                <div className="font-semibold capitalize">{t.type}</div>
-                <div className="text-[var(--text-muted)]">
-                  {t.description ?? "—"} &middot; {new Date(t.created_at).toLocaleString()}
-                </div>
-              </div>
-              <div className={t.amount_cents >= 0 ? "text-teal-400" : "text-red-400"}>
-                {t.amount_cents >= 0 ? "+" : ""}
-                {formatNaira(t.amount_cents)}
-              </div>
-            </div>
+              <span className="shrink-0 text-[var(--text-muted)]">
+                <IconChevronRight size={16} />
+              </span>
+            </Link>
           ))}
         </div>
       </section>

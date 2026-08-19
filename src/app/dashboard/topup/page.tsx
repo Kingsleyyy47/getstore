@@ -2,6 +2,9 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatNaira, type TopupRequest } from "@/lib/types";
 import { requestTopup } from "./actions";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
+import { IconPlus } from "@/components/icons";
 
 export default async function TopupPage({
   searchParams,
@@ -22,13 +25,11 @@ export default async function TopupPage({
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Top up your wallet</h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          Submit a top-up request below. An admin will review and credit your wallet manually.
-          (Automatic card payments are coming soon.)
-        </p>
-      </div>
+      <PageHeader
+        icon={<IconPlus />}
+        title="Add funds"
+        subtitle="Submit a top-up request below. An admin will review and credit your wallet manually. (Automatic card payments are coming soon.)"
+      />
 
       {searchParams.error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -77,11 +78,14 @@ export default async function TopupPage({
         <h2 className="mb-3 text-lg font-bold">Your top-up requests</h2>
         <div className="card divide-y divide-[var(--border)]">
           {requestList.length === 0 && (
-            <p className="p-6 text-sm text-[var(--text-muted)]">No top-up requests yet.</p>
+            <EmptyState icon={<IconPlus />} title="No top-up requests yet" body="Submit a request above to fund your wallet." />
           )}
           {requestList.map((r) => (
-            <div key={r.id} className="flex items-center justify-between px-6 py-4 text-sm">
-              <div>
+            <div
+              key={r.id}
+              className="flex flex-col gap-2 px-4 py-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6"
+            >
+              <div className="min-w-0 break-words">
                 <div className="font-semibold">{formatNaira(r.amount_cents)}</div>
                 <div className="text-[var(--text-muted)]">
                   {r.reference ?? "—"} &middot; {new Date(r.created_at).toLocaleString()}

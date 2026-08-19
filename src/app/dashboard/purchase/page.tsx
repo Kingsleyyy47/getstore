@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getSettings } from "@/lib/settings";
 import { formatNaira, type Wallet } from "@/lib/types";
 import PurchaseForm from "./PurchaseForm";
+import PageHeader from "@/components/PageHeader";
+import { IconPhone } from "@/components/icons";
 
 export default async function PurchasePage() {
   const profile = await requireUser();
@@ -18,7 +20,7 @@ export default async function PurchasePage() {
   if (!settings.numbers_enabled) {
     return (
       <div className="mx-auto max-w-xl space-y-6">
-        <h1 className="text-2xl font-bold">Buy a verification number</h1>
+        <PageHeader icon={<IconPhone />} title="USA & Canada numbers" />
         <div className="card p-6 text-sm text-[var(--text-muted)]">
           Numbers are currently unavailable. Please check back later.
         </div>
@@ -28,22 +30,25 @@ export default async function PurchasePage() {
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Buy a verification number</h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          Enter the service shortcode (see{" "}
-          <a
-            className="text-brand hover:underline"
-            href="https://daisysms.io/services"
-            target="_blank"
-            rel="noreferrer"
-          >
-            the services list
-          </a>
-          ) and how much you're willing to pay. Your wallet balance:{" "}
-          <strong>{formatNaira(w?.balance_cents ?? 0)}</strong>
-        </p>
-      </div>
+      <PageHeader
+        icon={<IconPhone />}
+        title="USA & Canada numbers"
+        subtitle={
+          <>
+            Enter the service shortcode (see{" "}
+            <a
+              className="text-brand hover:underline"
+              href="https://daisysms.io/services"
+              target="_blank"
+              rel="noreferrer"
+            >
+              the services list
+            </a>
+            ) and how much you're willing to pay. Your wallet balance:{" "}
+            <strong>{formatNaira(w?.balance_cents ?? 0)}</strong>
+          </>
+        }
+      />
 
       <PurchaseForm />
     </div>

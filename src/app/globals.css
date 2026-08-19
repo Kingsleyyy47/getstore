@@ -5,13 +5,13 @@
 /* Light theme (default) — white with a soft green tint, GetStore's green
    accent is a deep forest tone. */
 :root {
-  --bg: #f7faf8;
-  --card: #ffffff;
-  --border: #e0e9e3;
+  --bg: #eef6f0;
+  --card: #f6fbf7;
+  --border: #dbe9e0;
   --text: #0f1f16;
   --text-muted: #55685d;
   --input-bg: #ffffff;
-  --hover-border: #c3d3c8;
+  --hover-border: #b9d0c1;
 
   /* Accent green, as "R G B" channels so Tailwind's opacity modifiers
      (bg-brand/15, etc.) work via rgb(var(--accent) / <alpha-value>). */

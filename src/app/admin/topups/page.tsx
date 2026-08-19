@@ -1,6 +1,8 @@
 import { requireRole } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import TopupQueue from "@/components/TopupQueue";
+import PageHeader from "@/components/PageHeader";
+import { IconWallet } from "@/components/icons";
 
 export default async function AdminTopupsPage() {
   await requireRole("admin");
@@ -23,7 +25,7 @@ export default async function AdminTopupsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Pending top-ups</h1>
+      <PageHeader icon={<IconWallet />} title="Pending top-ups" />
       <TopupQueue items={items} />
     </div>
   );

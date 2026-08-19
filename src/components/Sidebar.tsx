@@ -12,11 +12,12 @@ interface SidebarItem {
 
 const customerItems: SidebarItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: <IconHome /> },
-  { href: "/dashboard/purchase", label: "Numbers", icon: <IconPhone /> },
+  { href: "/dashboard/purchase", label: "USA & Canada", icon: <IconPhone /> },
+  { href: "/dashboard/us-numbers", label: "US Only", icon: <IconFlag /> },
   { href: "/dashboard/countries", label: "All Countries", icon: <IconGlobe /> },
   { href: "/dashboard/marketplace", label: "Marketplace", icon: <IconStore /> },
-  { href: "/dashboard/logs", label: "Logs", icon: <IconList /> },
-  { href: "/dashboard/topup", label: "Top up", icon: <IconWallet /> },
+  { href: "/dashboard/logs", label: "History", icon: <IconList /> },
+  { href: "/dashboard/wallet", label: "Wallet", icon: <IconWallet /> },
 ];
 
 const adminItems: SidebarItem[] = [
@@ -41,6 +42,7 @@ export default function Sidebar({
   const pathname = usePathname();
   const items = variant === "admin" ? adminItems : customerItems;
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   const isActive = (href: string) =>
     href === "/dashboard" || href === "/admin" ? pathname === href : pathname.startsWith(href);
@@ -94,8 +96,26 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* Desktop: the permanent sidebar. */}
-      <aside className="hidden w-64 shrink-0 border-r border-[var(--border)] px-4 py-8 sm:block">
+      {/* Desktop: the permanent sidebar, collapsible to an icon rail. */}
+      <aside
+        className={`hidden shrink-0 border-r border-[var(--border)] py-8 transition-[width] duration-200 sm:block ${
+          collapsed ? "w-16 px-2" : "w-64 px-4"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={`mb-4 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[var(--text-muted)] transition-colors hover:bg-black/5 hover:text-[var(--text)] dark:hover:bg-white/5 ${
+            collapsed ? "justify-center" : ""
+          }`}
+        >
+          <span className={`inline-flex transition-transform duration-200 ${collapsed ? "rotate-180" : ""}`}>
+            <IconChevronsLeft />
+          </span>
+          {!collapsed && <span className="text-xs font-semibold uppercase tracking-wide">Collapse</span>}
+        </button>
+
         <nav className="flex flex-col gap-1">
           {items.map((item) => {
             const active = isActive(item.href);
@@ -103,10 +123,13 @@ export default function Sidebar({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`sidebar-link ${active ? "sidebar-link-active" : ""}`}
+                title={collapsed ? item.label : undefined}
+                className={`sidebar-link ${active ? "sidebar-link-active" : ""} ${
+                  collapsed ? "justify-center px-0" : ""
+                }`}
               >
                 {item.icon}
-                {item.label}
+                {!collapsed && item.label}
               </Link>
             );
           })}
@@ -114,15 +137,23 @@ export default function Sidebar({
 
         <div className="mt-8 border-t border-[var(--border)] pt-4">
           {variant === "customer" && isAdmin && (
-            <Link href="/admin" className="sidebar-link">
+            <Link
+              href="/admin"
+              title={collapsed ? "Admin panel" : undefined}
+              className={`sidebar-link ${collapsed ? "justify-center px-0" : ""}`}
+            >
               <IconShield />
-              Admin panel
+              {!collapsed && "Admin panel"}
             </Link>
           )}
           {variant === "admin" && (
-            <Link href="/dashboard" className="sidebar-link">
+            <Link
+              href="/dashboard"
+              title={collapsed ? "Back to dashboard" : undefined}
+              className={`sidebar-link ${collapsed ? "justify-center px-0" : ""}`}
+            >
               <IconHome />
-              Back to dashboard
+              {!collapsed && "Back to dashboard"}
             </Link>
           )}
         </div>
@@ -142,6 +173,21 @@ function IconClose() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+function IconFlag() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M4 22V4" />
+      <path d="M4 4h14l-2.5 4L20 12H4" />
+    </svg>
+  );
+}
+function IconChevronsLeft() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="m11 17-5-5 5-5M18 17l-5-5 5-5" />
     </svg>
   );
 }

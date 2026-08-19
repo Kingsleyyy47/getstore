@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import CategoryManager from "@/components/CategoryManager";
+import PageHeader from "@/components/PageHeader";
+import { IconTag } from "@/components/icons";
 
 export default async function AdminCategoriesPage() {
   const supabase = createClient();
@@ -18,12 +20,11 @@ export default async function AdminCategoriesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Categories</h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          Group product templates into categories, e.g. Twitch, Twitter, VPN.
-        </p>
-      </div>
+      <PageHeader
+        icon={<IconTag />}
+        title="Categories"
+        subtitle="Group product templates into categories, e.g. Twitch, Twitter, VPN."
+      />
       <CategoryManager initial={items} />
     </div>
   );

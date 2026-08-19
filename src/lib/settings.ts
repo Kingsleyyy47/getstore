@@ -5,12 +5,14 @@ export interface AppSettings {
   usd_to_ngn_rate: number;
   numbers_enabled: boolean;
   countries_enabled: boolean;
+  us_numbers_enabled: boolean;
 }
 
 const FALLBACK: AppSettings = {
   usd_to_ngn_rate: 1650,
   numbers_enabled: true,
   countries_enabled: true,
+  us_numbers_enabled: true,
 };
 
 /**
@@ -24,7 +26,7 @@ export async function getSettings(): Promise<AppSettings> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("app_settings")
-    .select("usd_to_ngn_rate, numbers_enabled, countries_enabled")
+    .select("usd_to_ngn_rate, numbers_enabled, countries_enabled, us_numbers_enabled")
     .eq("id", true)
     .single();
 
@@ -33,5 +35,6 @@ export async function getSettings(): Promise<AppSettings> {
     usd_to_ngn_rate: Number(data.usd_to_ngn_rate),
     numbers_enabled: data.numbers_enabled,
     countries_enabled: data.countries_enabled,
+    us_numbers_enabled: data.us_numbers_enabled,
   };
 }

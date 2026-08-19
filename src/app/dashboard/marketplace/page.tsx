@@ -2,6 +2,8 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatNaira, type Wallet } from "@/lib/types";
 import MarketplaceBrowser from "@/components/MarketplaceBrowser";
+import PageHeader from "@/components/PageHeader";
+import { IconStore } from "@/components/icons";
 
 export default async function MarketplacePage() {
   const profile = await requireUser();
@@ -27,12 +29,15 @@ export default async function MarketplacePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Marketplace</h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          Buy premium accounts instantly. Wallet balance: <strong>{formatNaira(w?.balance_cents ?? 0)}</strong>
-        </p>
-      </div>
+      <PageHeader
+        icon={<IconStore />}
+        title="Marketplace"
+        subtitle={
+          <>
+            Buy premium accounts instantly. Wallet balance: <strong>{formatNaira(w?.balance_cents ?? 0)}</strong>
+          </>
+        }
+      />
       <MarketplaceBrowser templates={items} />
     </div>
   );

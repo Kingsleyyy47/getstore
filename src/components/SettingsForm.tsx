@@ -6,14 +6,17 @@ export default function SettingsForm({
   initialRate,
   initialNumbersEnabled,
   initialCountriesEnabled,
+  initialUsNumbersEnabled,
 }: {
   initialRate: number;
   initialNumbersEnabled: boolean;
   initialCountriesEnabled: boolean;
+  initialUsNumbersEnabled: boolean;
 }) {
   const [rate, setRate] = useState(String(initialRate));
   const [numbersEnabled, setNumbersEnabled] = useState(initialNumbersEnabled);
   const [countriesEnabled, setCountriesEnabled] = useState(initialCountriesEnabled);
+  const [usNumbersEnabled, setUsNumbersEnabled] = useState(initialUsNumbersEnabled);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -31,6 +34,7 @@ export default function SettingsForm({
         usdToNgnRate: Number(rate),
         numbersEnabled,
         countriesEnabled,
+        usNumbersEnabled,
       }),
     });
     const json = await res.json();
@@ -70,6 +74,13 @@ export default function SettingsForm({
         onChange={setCountriesEnabled}
       />
 
+      <ToggleRow
+        title="Enable US Only (DaisySim API 2)"
+        description="A separate, USA-only numbers provider. Pick an app to see the live price. When disabled, the US Only page is unavailable to customers."
+        checked={usNumbersEnabled}
+        onChange={setUsNumbersEnabled}
+      />
+
       <div>
         <label className="label" htmlFor="rate">
           USD → NGN exchange rate
@@ -85,9 +96,9 @@ export default function SettingsForm({
           required
         />
         <p className="mt-1 text-xs text-[var(--text-muted)]">
-          e.g. 1650 means $1.00 = ₦1,650.00. Shared by both providers above to convert
-          their USD prices into the ₦ amount charged from a customer's wallet (plus
-          your markup).
+          e.g. 1650 means $1.00 = ₦1,650.00. Shared by all three providers above to
+          convert their USD prices into the ₦ amount charged from a customer's wallet
+          (plus your markup).
         </p>
       </div>
 

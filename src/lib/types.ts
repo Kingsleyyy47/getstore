@@ -45,7 +45,7 @@ export interface TopupRequest {
 }
 
 export type RentalStatus = "waiting" | "received" | "cancelled" | "done" | "expired";
-export type RentalProvider = "daisysms" | "daisysim";
+export type RentalProvider = "daisysms" | "daisysim" | "daisysim2";
 
 export interface Rental {
   id: string;

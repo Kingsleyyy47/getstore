@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import ProductTemplateManager from "@/components/ProductTemplateManager";
+import PageHeader from "@/components/PageHeader";
+import { IconBox } from "@/components/icons";
 
 export default async function AdminProductTemplatesPage() {
   const supabase = createClient();
@@ -24,12 +26,11 @@ export default async function AdminProductTemplatesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Product Templates</h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          Create and manage product templates for bulk account uploads.
-        </p>
-      </div>
+      <PageHeader
+        icon={<IconBox />}
+        title="Product Templates"
+        subtitle="Create and manage product templates for bulk account uploads."
+      />
       <ProductTemplateManager categories={categories ?? []} initial={items} />
     </div>
   );

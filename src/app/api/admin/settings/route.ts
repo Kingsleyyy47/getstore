@@ -18,6 +18,7 @@ export async function POST(req: Request) {
   const rate = Number(body?.usdToNgnRate);
   const numbersEnabled = Boolean(body?.numbersEnabled);
   const countriesEnabled = Boolean(body?.countriesEnabled);
+  const usNumbersEnabled = Boolean(body?.usNumbersEnabled);
 
   if (!Number.isFinite(rate) || rate <= 0) {
     return NextResponse.json({ error: "Enter a valid exchange rate" }, { status: 400 });
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
       usd_to_ngn_rate: rate,
       numbers_enabled: numbersEnabled,
       countries_enabled: countriesEnabled,
+      us_numbers_enabled: usNumbersEnabled,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     })

@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import RoleManager from "@/components/RoleManager";
 import { getCurrentProfile } from "@/lib/auth";
+import PageHeader from "@/components/PageHeader";
+import { IconShield } from "@/components/icons";
 
 export default async function AdminRolesPage() {
   const profile = await getCurrentProfile();
@@ -13,12 +15,11 @@ export default async function AdminRolesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Roles</h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          Promote a customer to admin for full access. You can't change your own role from here.
-        </p>
-      </div>
+      <PageHeader
+        icon={<IconShield />}
+        title="Roles"
+        subtitle="Promote a customer to admin for full access. You can't change your own role from here."
+      />
       <RoleManager items={profiles ?? []} currentUserId={profile!.id} />
     </div>
   );

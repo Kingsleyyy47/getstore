@@ -37,6 +37,9 @@ export default function FaqPage() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
       <div className="mb-12 text-center">
+        <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-brand/10 text-brand">
+          <IconHelp />
+        </span>
         <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand">
           Help center
         </div>
@@ -61,5 +64,15 @@ export default function FaqPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+function IconHelp() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 2-2.4 3.7" />
+      <path d="M12 17.5h.01" />
+    </svg>
   );
 }

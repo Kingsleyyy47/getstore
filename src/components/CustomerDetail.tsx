@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatNaira, type Rental, type Wallet, type WalletTransaction } from "@/lib/types";
 import AdjustBalanceForm from "./AdjustBalanceForm";
+import EmptyState from "@/components/EmptyState";
+import { IconUser, IconPhone, IconReceipt } from "@/components/icons";
 
 export default async function CustomerDetail({
   customerId,
@@ -38,11 +40,16 @@ export default async function CustomerDetail({
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">{profile.full_name ?? profile.email}</h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          {profile.email} &middot; <span className="badge bg-brand/15 text-brand">{profile.role}</span>
-        </p>
+      <div className="flex items-center gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+          <IconUser />
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold">{profile.full_name ?? profile.email}</h1>
+          <p className="text-sm text-[var(--text-muted)]">
+            {profile.email} &middot; <span className="badge bg-brand/15 text-brand">{profile.role}</span>
+          </p>
+        </div>
       </div>
 
       <div className="card flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
@@ -57,11 +64,14 @@ export default async function CustomerDetail({
         <h2 className="mb-3 text-lg font-bold">Rentals</h2>
         <div className="card divide-y divide-[var(--border)]">
           {rentalList.length === 0 && (
-            <p className="p-6 text-sm text-[var(--text-muted)]">No rentals yet.</p>
+            <EmptyState icon={<IconPhone />} title="No rentals yet" />
           )}
           {rentalList.map((r) => (
-            <div key={r.id} className="flex items-center justify-between px-6 py-4 text-sm">
-              <div>
+            <div
+              key={r.id}
+              className="flex flex-col gap-2 px-4 py-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6"
+            >
+              <div className="min-w-0 break-words">
                 <div className="font-semibold">
                   {r.service} &middot; +{r.phone}
                 </div>
@@ -69,7 +79,7 @@ export default async function CustomerDetail({
                   {new Date(r.created_at).toLocaleString()}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className="text-[var(--text-muted)]">{formatNaira(r.price_cents)}</span>
                 <span className="badge bg-white/10">{r.status}</span>
               </div>
@@ -82,11 +92,14 @@ export default async function CustomerDetail({
         <h2 className="mb-3 text-lg font-bold">Wallet activity</h2>
         <div className="card divide-y divide-[var(--border)]">
           {txList.length === 0 && (
-            <p className="p-6 text-sm text-[var(--text-muted)]">No transactions yet.</p>
+            <EmptyState icon={<IconReceipt />} title="No transactions yet" />
           )}
           {txList.map((t) => (
-            <div key={t.id} className="flex items-center justify-between px-6 py-4 text-sm">
-              <div>
+            <div
+              key={t.id}
+              className="flex flex-col gap-2 px-4 py-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6"
+            >
+              <div className="min-w-0 break-words">
                 <div className="font-semibold capitalize">{t.type}</div>
                 <div className="text-[var(--text-muted)]">
                   {t.description ?? "—"} &middot; {new Date(t.created_at).toLocaleString()}
