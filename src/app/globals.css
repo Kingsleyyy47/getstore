@@ -35,10 +35,24 @@
   --accent-hover: 10 43 27; /* #0a2b1b */
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
   transition: background-color 0.15s ease, color 0.15s ease;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* Belt-and-braces: decorative absolutely-positioned glow/pattern layers
+   (used throughout the marketing pages) are meant to be clipped by their
+   nearest positioned ancestor, never to widen the page itself. */
+.clip-decor {
+  position: relative;
+  overflow: hidden;
 }
 
 /* A serif display face for big headings, echoing a magazine-style hero

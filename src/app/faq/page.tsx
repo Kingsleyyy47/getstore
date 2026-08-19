@@ -1,3 +1,6 @@
+import Footer from "@/components/Footer";
+import { IconMail, IconWhatsapp, IconPhone, IconMessage } from "@/components/icons";
+
 const FAQS: { q: string; a: string }[] = [
   {
     q: "How does the wallet work?",
@@ -35,34 +38,87 @@ const FAQS: { q: string; a: string }[] = [
 
 export default function FaqPage() {
   return (
-    <div className="mx-auto max-w-3xl px-6 py-16">
-      <div className="mb-12 text-center">
-        <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-brand/10 text-brand">
-          <IconHelp />
-        </span>
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand">
-          Help center
+    <div className="overflow-x-hidden">
+      {/* Hero -- a dot-pattern strip, deliberately different from the
+          homepage's line-grid hero, so FAQ still feels like its own page. */}
+      <section className="clip-decor bg-gradient-to-br from-emerald-950 via-green-900 to-emerald-800 text-white">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.08]"
+          style={{
+            backgroundImage: "radial-gradient(white 1.5px, transparent 1.5px)",
+            backgroundSize: "24px 24px",
+          }}
+        />
+        <div className="relative mx-auto max-w-3xl px-4 py-14 text-center sm:px-6 sm:py-20">
+          <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-white/10">
+            <IconHelp />
+          </span>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-200">
+            Help center
+          </div>
+          <h1 className="text-3xl font-semibold sm:text-4xl">Questions, answered.</h1>
+          <p className="mx-auto mt-3 max-w-xl text-emerald-100/80">
+            Everything you need to know about wallets, numbers, and the marketplace. Can't
+            find what you're looking for? Reach out and we'll help you sort it out.
+          </p>
         </div>
-        <h1 className="text-3xl font-semibold sm:text-4xl">Questions, answered.</h1>
-        <p className="mx-auto mt-3 max-w-xl text-[var(--text-muted)]">
-          Everything you need to know about wallets, numbers, and the marketplace. Can't
-          find what you're looking for? Reach out and we'll help you sort it out.
-        </p>
+      </section>
+
+      <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 sm:py-16">
+        <div className="space-y-3">
+          {FAQS.map((item) => (
+            <details key={item.q} className="card group p-5 open:border-brand/40">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold">
+                {item.q}
+                <span className="shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-45">
+                  +
+                </span>
+              </summary>
+              <p className="mt-3 text-sm text-[var(--text-muted)]">{item.a}</p>
+            </details>
+          ))}
+        </div>
+
+        {/* Still-need-help contact card */}
+        <div className="card mt-10 flex flex-col items-center gap-4 p-6 text-center sm:flex-row sm:text-left">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
+            <IconMessage />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">Still need a hand?</div>
+            <p className="text-sm text-[var(--text-muted)]">
+              Our support team is a message away.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href="mailto:support@getstore.app"
+              aria-label="Email support"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:border-[var(--hover-border)] hover:text-[var(--text)]"
+            >
+              <IconMail size={18} />
+            </a>
+            <a
+              href="https://wa.me/2340000000000"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="WhatsApp support"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:border-[var(--hover-border)] hover:text-[var(--text)]"
+            >
+              <IconWhatsapp size={18} />
+            </a>
+            <a
+              href="tel:+2340000000000"
+              aria-label="Call support"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:border-[var(--hover-border)] hover:text-[var(--text)]"
+            >
+              <IconPhone size={18} />
+            </a>
+          </div>
+        </div>
       </div>
 
-      <div className="space-y-3">
-        {FAQS.map((item) => (
-          <details key={item.q} className="card group p-5 open:border-brand/40">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold">
-              {item.q}
-              <span className="shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-45">
-                +
-              </span>
-            </summary>
-            <p className="mt-3 text-sm text-[var(--text-muted)]">{item.a}</p>
-          </details>
-        ))}
-      </div>
+      <Footer />
     </div>
   );
 }

@@ -7,15 +7,23 @@ import "server-only";
  * DaisySim virtual-numbers API (the "All Countries" flow) -- it is not a
  * replacement for either. It is USA-only, and is surfaced to customers as
  * "US Only". Bearer-token auth, JSON. SERVER-ONLY: reads the secret
- * DAISYSIM2_API_KEY.
+ * DAISYSIM_API_KEY.
  *
- * Shape differs from the original DaisySim client in a few ways the docs
- * called out explicitly:
- *   - a single /apps/{country} call returns the purchasable apps (with
- *     price) for a country, instead of separate /services + /prices calls
- *   - /purchase takes an `app` code directly (no separate tier/price step --
- *     the server resolves the current price itself; we never send a
- *     client-supplied price)
+ * This is the same DaisySim account/API key as src/lib/daisysim.ts -- one
+ * company, two products under the same account -- so there is no separate
+ * DAISYSIM2_API_KEY. Only the base URL differs (server7 vs. the original
+ * /virtual endpoint).
+ *
+ * Field shapes below were copied verbatim from the server7 API docs
+ * (not re-derived/guessed), including two things that differ from the
+ * original DaisySim client's conventions:
+ *   - GET /apps/{country} and POST /check-all return their payload as a
+ *     bare array in `data` (NOT wrapped in a `{ apps: [...] }` /
+ *     `{ results: [...] }` object like /countries and /history are)
+ *   - /purchase takes an `app` code copied verbatim from /apps (never
+ *     constructed/guessed) and never sends a price -- the server resolves
+ *     the live price from the app code alone and returns what it actually
+ *     charged as `amount_charged`
  *   - /cancel and /check use the same TOO_EARLY / CODE_RECEIVED error-code
  *     pattern as the original DaisySim API, so the existing cancel-route
  *     handling logic carries over directly
@@ -33,19 +41,29 @@ export class DaisySim2Error extends Error {
 }
 
 function apiKey(): string {
-  const key = process.env.DAISYSIM2_API_KEY;
-  if (!key) throw new DaisySim2Error("DAISYSIM2_API_KEY is not set on the server");
+  // Same DaisySim account key as the original provider -- not a separate
+  // DAISYSIM2_API_KEY. Only the base URL is product-specific.
+  const key = process.env.DAISYSIM_API_KEY;
+  if (!key) throw new DaisySim2Error("DAISYSIM_API_KEY is not set on the server");
   return key;
 }
 
 async function call<T>(
   path: string,
-  init?: { method?: string; body?: unknown }
+  init?: { method?: string; body?: unknown; query?: Record<string, string | number | undefined> }
 ): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const url = new URL(`${BASE_URL}${path}`);
+  if (init?.query) {
+    for (const [k, v] of Object.entries(init.query)) {
+      if (v !== undefined) url.searchParams.set(k, String(v));
+    }
+  }
+
+  const res = await fetch(url.toString(), {
     method: init?.method ?? "GET",
     headers: {
       Authorization: `Bearer ${apiKey()}`,
+      Accept: "application/json",
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
     },
     body: init?.body ? JSON.stringify(init.body) : undefined,
@@ -72,8 +90,9 @@ export async function getBalance(): Promise<Balance> {
   return call<Balance>("/balance");
 }
 
+/** Currently USA-only per the docs -- id is a string, e.g. "USA". */
 export interface Country {
-  id: number | string;
+  id: string;
   name: string;
 }
 
@@ -88,9 +107,13 @@ export interface App {
   price: number;
 }
 
+/**
+ * Response is a bare array in `data` (not `{ apps: [...] }`). Sold-out
+ * services are already excluded server-side, so this can be rendered
+ * directly with no filtering.
+ */
 export async function getApps(country: Country["id"]): Promise<App[]> {
-  const data = await call<{ apps: App[] }>(`/apps/${country}`);
-  return data.apps;
+  return call<App[]>(`/apps/${country}`);
 }
 
 export interface PurchaseResult {
@@ -130,14 +153,25 @@ export async function checkStatus(activationId: string): Promise<CheckResult> {
   return call<CheckResult>(`/check/${activationId}`);
 }
 
-/** Batched status check, capped at 20 ids per the API docs. */
-export async function checkAll(activationIds: string[]): Promise<CheckResult[]> {
+/** /check-all's per-item status set is wider than single /check's. */
+export interface CheckAllResult {
+  activation_id: string;
+  status: "Completed" | "Waiting" | "Not Found" | "Invalid";
+  code: string | null;
+  /** Present for Completed/Waiting; omitted for Not Found/Invalid. */
+  phone_number?: string;
+}
+
+/**
+ * Batched status check, capped at 20 ids per the docs. Response is a bare
+ * array in `data` (not `{ results: [...] }`).
+ */
+export async function checkAll(activationIds: string[]): Promise<CheckAllResult[]> {
   const ids = activationIds.slice(0, 20);
-  const data = await call<{ results: CheckResult[] }>("/check-all", {
+  return call<CheckAllResult[]>("/check-all", {
     method: "POST",
     body: { ids },
   });
-  return data.results;
 }
 
 export interface CancelResult {
@@ -154,6 +188,7 @@ export interface HistoryOrder {
   activation_id: string;
   phone_number: string;
   service: string;
+  service_code: string | null;
   country: string;
   status: string;
   code: string | null;
@@ -162,7 +197,17 @@ export interface HistoryOrder {
   completed_at: string | null;
 }
 
-export async function getHistory(): Promise<HistoryOrder[]> {
-  const data = await call<{ orders: HistoryOrder[] }>("/history");
-  return data.orders;
+export interface HistoryResponse {
+  orders: HistoryOrder[];
+  pagination: { current_page: number; per_page: number; total: number; last_page: number };
+}
+
+export async function getHistory(opts?: {
+  page?: number;
+  perPage?: number;
+  status?: "completed" | "waiting" | "cancelled";
+}): Promise<HistoryResponse> {
+  return call<HistoryResponse>("/history", {
+    query: { page: opts?.page, per_page: opts?.perPage, status: opts?.status },
+  });
 }

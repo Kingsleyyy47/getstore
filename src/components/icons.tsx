@@ -245,3 +245,60 @@ export function IconFlag({ size = 20 }: { size?: number }) {
     </svg>
   );
 }
+export function IconMail({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m2 6 10 7 10-7" />
+    </svg>
+  );
+}
+export function IconWhatsapp({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 21l1.4-4.2A8.5 8.5 0 1 1 8.3 20L3 21Z" />
+      <path d="M8.5 9.5c0 3.5 2.5 6 6 6 .6 0 1.1-.4 1.1-1l.2-1.2c.1-.5-.2-1-.7-1.2l-1.6-.6c-.4-.2-.9 0-1.2.3l-.4.5a5 5 0 0 1-2.2-2.2l.5-.4c.3-.3.5-.8.3-1.2l-.6-1.6c-.2-.5-.7-.8-1.2-.7L7.5 6.2c-.6 0-1 .5-1 1.1 0 .8.1 1.5.3 2.2" />
+    </svg>
+  );
+}
+export function IconTelegram({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="m21 4-19 8 6 2 2 6 3-4 5 3 3-15Z" />
+      <path d="m8 14 11-8-8 9" />
+    </svg>
+  );
+}
+export function IconTwitter({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 3l7.5 9.5L3.5 21H6l6-6.7 5 6.7h4l-8-10.2L20.5 3H18l-5.5 6.1L8 3H3Z" />
+    </svg>
+  );
+}
+export function IconInstagram({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <path d="M17.5 6.5h.01" />
+    </svg>
+  );
+}
+export function IconUserPlus({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="9" cy="8" r="4" />
+      <path d="M2 21v-1a7 7 0 0 1 7-7h0a7 7 0 0 1 4.5 1.6" />
+      <path d="M19 8v6M16 11h6" />
+    </svg>
+  );
+}
+export function IconLock({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  );
+}

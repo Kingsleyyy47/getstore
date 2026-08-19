@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/auth";
+import Footer from "@/components/Footer";
 
 const HIGHLIGHTS = [
   { icon: <IconBolt />, title: "Instant Delivery", body: "Codes and credentials arrive the moment they're ready." },
@@ -41,9 +42,9 @@ export default async function Home() {
   if (profile) redirect("/dashboard");
 
   return (
-    <div>
+    <div className="overflow-x-hidden">
       {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-brand/5 to-transparent">
+      <section className="clip-decor bg-gradient-to-b from-brand/5 to-transparent">
         <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-2 lg:gap-16">
           <div>
             <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand">
@@ -108,18 +109,21 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* About */}
+      {/* About -- a dot-grid pattern, deliberately different from the
+          hero's line-grid and the stats bar's diagonal pattern below, so
+          each section reads as its own distinct visual moment. */}
       <section className="border-t border-[var(--border)]">
         <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-2 lg:gap-16">
           <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-3xl bg-gradient-to-br from-brand/10 to-brand/5">
             <div
-              className="pointer-events-none absolute inset-0 opacity-[0.15]"
+              className="pointer-events-none absolute inset-0 opacity-[0.18]"
               style={{
-                backgroundImage:
-                  "linear-gradient(to right, rgb(var(--accent)) 1px, transparent 1px), linear-gradient(to bottom, rgb(var(--accent)) 1px, transparent 1px)",
-                backgroundSize: "32px 32px",
+                backgroundImage: "radial-gradient(rgb(var(--accent)) 1.5px, transparent 1.5px)",
+                backgroundSize: "22px 22px",
               }}
             />
+            <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-brand/10 blur-2xl" />
+            <div className="pointer-events-none absolute -bottom-10 -right-6 h-48 w-48 rounded-full bg-brand/15 blur-2xl" />
             <div className="relative flex h-full items-center justify-center">
               <span className="flex h-24 w-24 items-center justify-center rounded-full bg-brand/15 text-brand">
                 <IconWallet size={40} />
@@ -148,9 +152,17 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Services / collection */}
-      <section className="border-t border-[var(--border)] bg-brand/5">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+      {/* Services / collection -- diagonal-stripe pattern, distinct from
+          the hero's straight grid and the About section's dots. */}
+      <section className="clip-decor border-t border-[var(--border)] bg-brand/5">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.5]"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(135deg, rgb(var(--accent) / 0.05) 0px, rgb(var(--accent) / 0.05) 1px, transparent 1px, transparent 22px)",
+          }}
+        />
+        <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
           <div className="mb-10 text-center">
             <div className="mb-3 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand">
               Our services
@@ -177,15 +189,24 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Stats bar */}
-      <section className="bg-gradient-to-br from-emerald-950 via-green-900 to-emerald-800 text-white">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-4 py-12 sm:grid-cols-4 sm:px-6 sm:py-16">
+      {/* Stats bar -- diagonal-line pattern, distinct from the hero's
+          straight grid and the About/Services patterns above. */}
+      <section className="clip-decor bg-gradient-to-br from-emerald-950 via-green-900 to-emerald-800 text-white">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.06]"
+          style={{
+            backgroundImage: "repeating-linear-gradient(45deg, white 0px, white 1px, transparent 1px, transparent 26px)",
+          }}
+        />
+        <div className="relative mx-auto grid max-w-6xl grid-cols-2 gap-8 px-4 py-12 sm:grid-cols-4 sm:px-6 sm:py-16">
           <StatItem icon={<IconUsers />} value="10K+" label="Happy customers" />
           <StatItem icon={<IconPhone />} value="50K+" label="Numbers delivered" />
           <StatItem icon={<IconGlobe />} value="120+" label="Countries" />
           <StatItem icon={<IconBolt />} value="24/7" label="Instant delivery" />
         </div>
       </section>
+
+      <Footer />
     </div>
   );
 }
