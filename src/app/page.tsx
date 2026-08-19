@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/auth";
+import { getSupportLinks } from "@/lib/settings";
 import Footer from "@/components/Footer";
 
 const HIGHLIGHTS = [
@@ -40,6 +41,7 @@ const SERVICES = [
 export default async function Home() {
   const profile = await getCurrentProfile();
   if (profile) redirect("/dashboard");
+  const links = await getSupportLinks();
 
   return (
     <div className="overflow-x-hidden">
@@ -206,7 +208,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <Footer />
+      <Footer links={links} />
     </div>
   );
 }

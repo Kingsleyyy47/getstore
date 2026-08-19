@@ -1,5 +1,7 @@
 import Footer from "@/components/Footer";
-import { IconMail, IconWhatsapp, IconPhone, IconMessage } from "@/components/icons";
+import SocialLinks, { hasAnySocialLink } from "@/components/SocialLinks";
+import { IconMessage } from "@/components/icons";
+import { getSupportLinks } from "@/lib/settings";
 
 const FAQS: { q: string; a: string }[] = [
   {
@@ -36,7 +38,10 @@ const FAQS: { q: string; a: string }[] = [
   },
 ];
 
-export default function FaqPage() {
+export default async function FaqPage() {
+  const links = await getSupportLinks();
+  const showContactCard = hasAnySocialLink(links);
+
   return (
     <div className="overflow-x-hidden">
       {/* Hero -- a dot-pattern strip, deliberately different from the
@@ -79,46 +84,27 @@ export default function FaqPage() {
           ))}
         </div>
 
-        {/* Still-need-help contact card */}
-        <div className="card mt-10 flex flex-col items-center gap-4 p-6 text-center sm:flex-row sm:text-left">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
-            <IconMessage />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold">Still need a hand?</div>
-            <p className="text-sm text-[var(--text-muted)]">
-              Our support team is a message away.
-            </p>
+        {/* Still-need-help contact card -- only shows once at least one
+            support/social link is set from Admin -> Support. */}
+        {showContactCard && (
+          <div className="card mt-10 flex flex-col items-center gap-4 p-6 text-center sm:flex-row sm:text-left">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
+              <IconMessage />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold">Still need a hand?</div>
+              <p className="text-sm text-[var(--text-muted)]">
+                Our support team is a message away.
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <SocialLinks links={links} size={18} variant="light" />
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <a
-              href="mailto:support@getstore.app"
-              aria-label="Email support"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:border-[var(--hover-border)] hover:text-[var(--text)]"
-            >
-              <IconMail size={18} />
-            </a>
-            <a
-              href="https://wa.me/2340000000000"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="WhatsApp support"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:border-[var(--hover-border)] hover:text-[var(--text)]"
-            >
-              <IconWhatsapp size={18} />
-            </a>
-            <a
-              href="tel:+2340000000000"
-              aria-label="Call support"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:border-[var(--hover-border)] hover:text-[var(--text)]"
-            >
-              <IconPhone size={18} />
-            </a>
-          </div>
-        </div>
+        )}
       </div>
 
-      <Footer />
+      <Footer links={links} />
     </div>
   );
 }

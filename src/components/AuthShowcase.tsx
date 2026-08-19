@@ -1,6 +1,7 @@
-import { IconMail, IconWhatsapp, IconTelegram, IconTwitter } from "@/components/icons";
+import type { SupportLinks } from "@/lib/settings";
+import SocialLinks, { hasAnySocialLink } from "@/components/SocialLinks";
 
-export default function AuthShowcase() {
+export default function AuthShowcase({ links }: { links: SupportLinks }) {
   return (
     <div className="clip-decor hidden bg-gradient-to-br from-emerald-950 via-green-900 to-emerald-800 p-12 text-white lg:flex lg:w-1/2 lg:flex-col lg:justify-between">
       {/* Abstract glow, no illustrations */}
@@ -47,42 +48,9 @@ export default function AuthShowcase() {
           <Stat value="10K+" label="Numbers delivered" />
         </div>
 
-        <div className="flex items-center gap-3 text-emerald-100/70">
-          <a
-            href="mailto:support@getstore.app"
-            aria-label="Email support"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
-          >
-            <IconMail size={16} />
-          </a>
-          <a
-            href="https://wa.me/2340000000000"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="WhatsApp"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
-          >
-            <IconWhatsapp size={16} />
-          </a>
-          <a
-            href="https://t.me/getstore"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Telegram"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
-          >
-            <IconTelegram size={16} />
-          </a>
-          <a
-            href="https://x.com/getstore"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="X (Twitter)"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
-          >
-            <IconTwitter size={16} />
-          </a>
-        </div>
+        {/* Only renders whichever channels the admin has actually set
+            (Admin -> Support) -- nothing shows here until then. */}
+        {hasAnySocialLink(links) && <SocialLinks links={links} size={16} variant="dark" />}
       </div>
     </div>
   );

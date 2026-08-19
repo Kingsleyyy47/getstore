@@ -29,6 +29,7 @@ const adminItems: SidebarItem[] = [
   { href: "/admin/topups", label: "Top-ups", icon: <IconWallet /> },
   { href: "/admin/announcements", label: "Announcements", icon: <IconBell /> },
   { href: "/admin/roles", label: "Roles", icon: <IconShield /> },
+  { href: "/admin/support", label: "Support", icon: <IconMessage /> },
   { href: "/admin/settings", label: "Settings", icon: <IconSettings /> },
 ];
 
@@ -181,6 +182,13 @@ function IconFlag() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M4 22V4" />
       <path d="M4 4h14l-2.5 4L20 12H4" />
+    </svg>
+  );
+}
+function IconMessage() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" />
     </svg>
   );
 }

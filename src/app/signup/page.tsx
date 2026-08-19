@@ -1,11 +1,15 @@
 import AuthShowcase from "@/components/AuthShowcase";
-import { IconUserPlus, IconMail, IconWhatsapp } from "@/components/icons";
+import SocialLinks, { hasAnySocialLink } from "@/components/SocialLinks";
+import { IconUserPlus } from "@/components/icons";
+import { getSupportLinks } from "@/lib/settings";
 import { signup } from "./actions";
 
-export default function SignupPage({ searchParams }: { searchParams: { error?: string } }) {
+export default async function SignupPage({ searchParams }: { searchParams: { error?: string } }) {
+  const links = await getSupportLinks();
+
   return (
     <div className="flex min-h-[calc(100vh-73px)] flex-col lg:flex-row">
-      <AuthShowcase />
+      <AuthShowcase links={links} />
 
       {/* Mobile/tablet only: a dot-pattern accent strip, deliberately
           different from the login page's line-grid strip, so the two auth
@@ -92,24 +96,11 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
             </a>
           </p>
 
-          <div className="mt-6 flex items-center justify-center gap-3">
-            <a
-              href="mailto:support@getstore.app"
-              aria-label="Email support"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:border-[var(--hover-border)] hover:text-[var(--text)]"
-            >
-              <IconMail size={16} />
-            </a>
-            <a
-              href="https://wa.me/2340000000000"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="WhatsApp support"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:border-[var(--hover-border)] hover:text-[var(--text)]"
-            >
-              <IconWhatsapp size={16} />
-            </a>
-          </div>
+          {hasAnySocialLink(links) && (
+            <div className="mt-6 flex items-center justify-center">
+              <SocialLinks links={links} variant="light" />
+            </div>
+          )}
         </div>
       </div>
     </div>
