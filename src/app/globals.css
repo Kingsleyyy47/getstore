@@ -17,6 +17,14 @@
      (bg-brand/15, etc.) work via rgb(var(--accent) / <alpha-value>). */
   --accent: 21 87 53; /* #155735 */
   --accent-hover: 14 61 37; /* #0e3d25 */
+
+  /* Site-wide faint "sprinkled icons" background (generic outline icons --
+     chat, phone, mail, wallet, globe, send, bell, shield, heart -- not
+     copies of any specific app's logo). Baked as a 340x340 tiled SVG data
+     URI with the opacity baked into the SVG itself (stroke-opacity), so it
+     layers as this element's background-image on top of --bg with zero
+     extra markup needed on any individual page. Dark-mode variant below. */
+  --icon-pattern: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22340%22%20height%3D%22340%22%20viewBox%3D%220%200%20340%20340%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%230f1f16%22%20stroke-opacity%3D%220.07%22%20stroke-width%3D%221.6%22%3E%3Cg%20transform%3D%22translate%2810%2020%29%20rotate%28-8%2012%2012%29%22%3E%3Cpath%20d%3D%22M21%2015a2%202%200%200%201-2%202H7l-4%204V5a2%202%200%200%201%202-2h14a2%202%200%200%201%202%202Z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28130%2010%29%20rotate%2812%2012%2012%29%22%3E%3Cpath%20d%3D%22M7%202h10v20H7z%22%2F%3E%3Cpath%20d%3D%22M11%2018h2%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28250%2030%29%20rotate%28-6%2012%2012%29%22%3E%3Cpath%20d%3D%22M2%204h20v16H2z%22%2F%3E%3Cpath%20d%3D%22m2%206%2010%207%2010-7%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2830%20120%29%20rotate%288%2012%2012%29%22%3E%3Cpath%20d%3D%22M2%206h20v14H2z%22%2F%3E%3Cpath%20d%3D%22M2%2010h20%22%2F%3E%3Cpath%20d%3D%22M17%2015h.01%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28160%20110%29%20rotate%28-10%2012%2012%29%22%3E%3Cpath%20d%3D%22M12%202a10%2010%200%201%200%20.01%200Z%22%2F%3E%3Cpath%20d%3D%22M2%2012h20%22%2F%3E%3Cpath%20d%3D%22M12%202a15.3%2015.3%200%200%201%204%2010%2015.3%2015.3%200%200%201-4%2010%2015.3%2015.3%200%200%201-4-10%2015.3%2015.3%200%200%201%204-10Z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28270%20130%29%20rotate%2815%2012%2012%29%22%3E%3Cpath%20d%3D%22M22%202%2011%2013%22%2F%3E%3Cpath%20d%3D%22M22%202%2015%2022l-4-9-9-4%2020-7Z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2860%20220%29%20rotate%28-5%2012%2012%29%22%3E%3Cpath%20d%3D%22M18%208a6%206%200%201%200-12%200c0%207-3%209-3%209h18s-3-2-3-9%22%2F%3E%3Cpath%20d%3D%22M13.73%2021a2%202%200%200%201-3.46%200%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28190%20230%29%20rotate%289%2012%2012%29%22%3E%3Cpath%20d%3D%22M12%202%204%205v6c0%205%203.5%209%208%2011%204.5-2%208-6%208-11V5l-8-3Z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28280%20250%29%20rotate%28-12%2012%2012%29%22%3E%3Cpath%20d%3D%22M20.8%204.6a5.5%205.5%200%200%200-7.8%200L12%205.6l-1-1a5.5%205.5%200%201%200-7.8%207.8l1%201L12%2021l7.8-7.8%201-1a5.5%205.5%200%200%200%200-7.8Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E");
 }
 
 /* Dark theme, applied via a `dark` class on <html> (see layout.tsx). The
@@ -33,6 +41,9 @@
 
   --accent: 17 66 41; /* #114229, darker than light mode's accent */
   --accent-hover: 10 43 27; /* #0a2b1b */
+
+  /* Same tile, pale icons against the near-black background instead. */
+  --icon-pattern: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22340%22%20height%3D%22340%22%20viewBox%3D%220%200%20340%20340%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23eaf3ee%22%20stroke-opacity%3D%220.08%22%20stroke-width%3D%221.6%22%3E%3Cg%20transform%3D%22translate%2810%2020%29%20rotate%28-8%2012%2012%29%22%3E%3Cpath%20d%3D%22M21%2015a2%202%200%200%201-2%202H7l-4%204V5a2%202%200%200%201%202-2h14a2%202%200%200%201%202%202Z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28130%2010%29%20rotate%2812%2012%2012%29%22%3E%3Cpath%20d%3D%22M7%202h10v20H7z%22%2F%3E%3Cpath%20d%3D%22M11%2018h2%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28250%2030%29%20rotate%28-6%2012%2012%29%22%3E%3Cpath%20d%3D%22M2%204h20v16H2z%22%2F%3E%3Cpath%20d%3D%22m2%206%2010%207%2010-7%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2830%20120%29%20rotate%288%2012%2012%29%22%3E%3Cpath%20d%3D%22M2%206h20v14H2z%22%2F%3E%3Cpath%20d%3D%22M2%2010h20%22%2F%3E%3Cpath%20d%3D%22M17%2015h.01%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28160%20110%29%20rotate%28-10%2012%2012%29%22%3E%3Cpath%20d%3D%22M12%202a10%2010%200%201%200%20.01%200Z%22%2F%3E%3Cpath%20d%3D%22M2%2012h20%22%2F%3E%3Cpath%20d%3D%22M12%202a15.3%2015.3%200%200%201%204%2010%2015.3%2015.3%200%200%201-4%2010%2015.3%2015.3%200%200%201-4-10%2015.3%2015.3%200%200%201%204-10Z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28270%20130%29%20rotate%2815%2012%2012%29%22%3E%3Cpath%20d%3D%22M22%202%2011%2013%22%2F%3E%3Cpath%20d%3D%22M22%202%2015%2022l-4-9-9-4%2020-7Z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2860%20220%29%20rotate%28-5%2012%2012%29%22%3E%3Cpath%20d%3D%22M18%208a6%206%200%201%200-12%200c0%207-3%209-3%209h18s-3-2-3-9%22%2F%3E%3Cpath%20d%3D%22M13.73%2021a2%202%200%200%201-3.46%200%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28190%20230%29%20rotate%289%2012%2012%29%22%3E%3Cpath%20d%3D%22M12%202%204%205v6c0%205%203.5%209%208%2011%204.5-2%208-6%208-11V5l-8-3Z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28280%20250%29%20rotate%28-12%2012%2012%29%22%3E%3Cpath%20d%3D%22M20.8%204.6a5.5%205.5%200%200%200-7.8%200L12%205.6l-1-1a5.5%205.5%200%201%200-7.8%207.8l1%201L12%2021l7.8-7.8%201-1a5.5%205.5%200%200%200%200-7.8Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E");
 }
 
 html {
@@ -40,7 +51,16 @@ html {
 }
 
 body {
-  background: var(--bg);
+  background-color: var(--bg);
+  /* Sprinkled-icon pattern site-wide, on top of the plain background
+     color -- automatically covers every page (marketing, auth, dashboard,
+     admin) with no per-page markup. It only shows through wherever a page
+     doesn't paint its own opaque background (cards, hero sections, etc.
+     sit on top of it as normal), matching the "visible around content,
+     hidden behind it" look. */
+  background-image: var(--icon-pattern);
+  background-repeat: repeat;
+  background-size: 340px 340px;
   color: var(--text);
   transition: background-color 0.15s ease, color 0.15s ease;
   overflow-x: hidden;
