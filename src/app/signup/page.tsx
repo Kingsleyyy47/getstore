@@ -22,10 +22,18 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
 
           <form action={signup} className="card space-y-4 p-6">
             <div>
-              <label className="label" htmlFor="full_name">
-                Full name
+              <label className="label" htmlFor="username">
+                Username
               </label>
-              <input className="input" id="full_name" name="full_name" type="text" autoFocus />
+              <input
+                className="input"
+                id="username"
+                name="username"
+                type="text"
+                autoFocus
+                required
+                placeholder="e.g. kingsley01"
+              />
             </div>
             <div>
               <label className="label" htmlFor="email">

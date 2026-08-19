@@ -18,7 +18,7 @@ export default async function Navbar() {
     <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <Link
-          href={profile ? "/dashboard" : "/login"}
+          href={profile ? "/dashboard" : "/"}
           className="flex items-center gap-2 font-display text-lg font-semibold"
         >
           <span className="h-7 w-7 rounded-lg bg-gradient-to-br from-brand to-emerald-400" />
