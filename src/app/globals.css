@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Light theme (default) — white with a soft green tint, GetStore's green
+   accent is a deep forest tone. */
+:root {
+  --bg: #f7faf8;
+  --card: #ffffff;
+  --border: #e0e9e3;
+  --text: #0f1f16;
+  --text-muted: #55685d;
+  --input-bg: #ffffff;
+  --hover-border: #c3d3c8;
+
+  /* Accent green, as "R G B" channels so Tailwind's opacity modifiers
+     (bg-brand/15, etc.) work via rgb(var(--accent) / <alpha-value>). */
+  --accent: 21 87 53; /* #155735 */
+  --accent-hover: 14 61 37; /* #0e3d25 */
+}
+
+/* Dark theme, applied via a `dark` class on <html> (see layout.tsx). The
+   green accent goes a shade darker than light mode, set against a near-
+   black green-tinted background rather than DaisySMS-purple/grey. */
+.dark {
+  --bg: #0a120d;
+  --card: #101a13;
+  --border: #1e2e24;
+  --text: #eaf3ee;
+  --text-muted: #8aa294;
+  --input-bg: #0d1610;
+  --hover-border: #2c4034;
+
+  --accent: 17 66 41; /* #114229, darker than light mode's accent */
+  --accent-hover: 10 43 27; /* #0a2b1b */
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* A serif display face for big headings, echoing a magazine-style hero
+   headline, kept out of body copy and form UI so it stays readable there. */
+h1,
+h2 {
+  font-family: var(--font-display), serif;
+  letter-spacing: -0.01em;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-primary {
+  @apply btn bg-brand text-white hover:bg-brand-dark;
+}
+
+.btn-ghost {
+  @apply btn border border-[var(--border)] text-[var(--text)] hover:border-[var(--hover-border)];
+}
+
+.input {
+  @apply w-full rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-[var(--text)] outline-none focus:border-brand;
+}
+
+.sidebar-link {
+  @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-black/5 dark:hover:bg-white/5 hover:text-[var(--text)];
+}
+
+.sidebar-link-active {
+  @apply bg-brand/15 text-brand hover:bg-brand/15 hover:text-brand;
+}
+
+.label {
+  @apply mb-1.5 block text-sm font-medium text-[var(--text-muted)];
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+}
+
+/* Hides the scrollbar on the mobile horizontal nav strip while keeping it
+   scrollable — the strip is a deliberate swipe-to-scroll affordance, not
+   something that needs a visible track. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
