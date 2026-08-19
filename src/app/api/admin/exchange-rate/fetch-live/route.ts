@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchLiveUsdToNgnRate, ExchangeRateError } from "@/lib/exchangeRate";
 
-export async function POST(req: Request) {
+export async function POST() {
   const supabase = createClient();
   const {
     data: { user },
@@ -14,27 +15,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const body = await req.json().catch(() => null);
-  const numbersEnabled = Boolean(body?.numbersEnabled);
-  const countriesEnabled = Boolean(body?.countriesEnabled);
-  const usNumbersEnabled = Boolean(body?.usNumbersEnabled);
-  const extraActivationEnabled = Boolean(body?.extraActivationEnabled);
+  let rate: number;
+  try {
+    rate = await fetchLiveUsdToNgnRate();
+  } catch (e) {
+    const message = e instanceof ExchangeRateError ? e.message : "Failed to fetch a live rate";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 
+  const updatedAt = new Date().toISOString();
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const { error } = await admin
     .from("app_settings")
     .update({
-      numbers_enabled: numbersEnabled,
-      countries_enabled: countriesEnabled,
-      us_numbers_enabled: usNumbersEnabled,
-      extra_activation_enabled: extraActivationEnabled,
+      usd_to_ngn_rate: rate,
+      exchange_rate_mode: "live",
+      exchange_rate_updated_at: updatedAt,
       updated_by: user.id,
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     })
-    .eq("id", true)
-    .select()
-    .single();
+    .eq("id", true);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ settings: data });
+  return NextResponse.json({ rate, updatedAt });
 }

@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/settings";
+import { getServicePriceRow, computeEffectivePriceCents } from "@/lib/pricing";
 import * as daisysim from "@/lib/daisysim";
-
-const MARKUP_PERCENT = Number(process.env.MARKUP_PERCENT ?? "0");
 
 export async function POST(req: Request) {
   const supabase = createClient();
@@ -27,6 +26,13 @@ export async function POST(req: Request) {
 
   if (!country || !service || !Number.isFinite(tier)) {
     return NextResponse.json({ error: "country, service, and tier are required" }, { status: 400 });
+  }
+
+  // Admin-configured price override for this service in this country, if
+  // any -- see src/lib/pricing.ts for the precedence.
+  const priceOverride = await getServicePriceRow("daisysim", String(country), service);
+  if (priceOverride?.is_enabled === false) {
+    return NextResponse.json({ error: "This service is currently unavailable" }, { status: 403 });
   }
 
   const { data: wallet } = await supabase
@@ -54,9 +60,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "That price tier is no longer available. Please refresh and try again." }, { status: 410 });
   }
 
-  const estimatedChargeNairaCents = Math.round(
-    selectedTier.price * (1 + MARKUP_PERCENT / 100) * rate * 100
-  );
+  const estimatedChargeNairaCents = computeEffectivePriceCents(selectedTier.price, rate, priceOverride);
   if (estimatedChargeNairaCents > balanceNairaCents) {
     return NextResponse.json({ error: "Insufficient wallet balance for this price" }, { status: 402 });
   }
@@ -76,7 +80,7 @@ export async function POST(req: Request) {
 
   // Charge based on what DaisySim actually charged our platform, not our
   // estimate, in case of any last-moment drift.
-  const chargeNairaCents = Math.round(result.amount_charged * (1 + MARKUP_PERCENT / 100) * rate * 100);
+  const chargeNairaCents = computeEffectivePriceCents(result.amount_charged, rate, priceOverride);
   const admin = createAdminClient();
   const newBalanceNairaCents = balanceNairaCents - chargeNairaCents;
 

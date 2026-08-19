@@ -12,6 +12,7 @@ interface App {
   name: string;
   price: number;
   naira_cents: number;
+  is_favorite?: boolean;
 }
 
 // This provider is USA-only, so unlike "All Countries" we don't ask the
@@ -234,6 +235,7 @@ export default function USNumbersBrowser() {
                   checked={appCode === a.code}
                   onChange={() => setAppCode(a.code)}
                 />
+                {a.is_favorite && <span className="text-amber-500">★</span>}
                 {a.name}
               </span>
               <span className="font-bold text-[var(--text)]">{formatNaira(a.naira_cents)}</span>

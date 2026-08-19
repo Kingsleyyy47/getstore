@@ -10,6 +10,7 @@ interface Country {
 interface Service {
   code: string;
   name: string;
+  is_favorite?: boolean;
 }
 interface Tier {
   tier: number;
@@ -249,6 +250,7 @@ export default function CountriesBrowser({ countries }: { countries: Country[] }
             <option value="">{loadingServices ? "Loading..." : "Choose a service"}</option>
             {services.map((s) => (
               <option key={s.code} value={s.code}>
+                {s.is_favorite ? "★ " : ""}
                 {s.name}
               </option>
             ))}

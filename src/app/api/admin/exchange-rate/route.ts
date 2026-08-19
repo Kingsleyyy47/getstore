@@ -15,26 +15,25 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => null);
-  const numbersEnabled = Boolean(body?.numbersEnabled);
-  const countriesEnabled = Boolean(body?.countriesEnabled);
-  const usNumbersEnabled = Boolean(body?.usNumbersEnabled);
-  const extraActivationEnabled = Boolean(body?.extraActivationEnabled);
+  const rate = Number(body?.usdToNgnRate);
 
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return NextResponse.json({ error: "Enter a valid exchange rate" }, { status: 400 });
+  }
+
+  const updatedAt = new Date().toISOString();
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const { error } = await admin
     .from("app_settings")
     .update({
-      numbers_enabled: numbersEnabled,
-      countries_enabled: countriesEnabled,
-      us_numbers_enabled: usNumbersEnabled,
-      extra_activation_enabled: extraActivationEnabled,
+      usd_to_ngn_rate: rate,
+      exchange_rate_mode: "manual",
+      exchange_rate_updated_at: updatedAt,
       updated_by: user.id,
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     })
-    .eq("id", true)
-    .select()
-    .single();
+    .eq("id", true);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ settings: data });
+  return NextResponse.json({ updatedAt });
 }

@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getSettings } from "@/lib/settings";
+import { getServicePriceRow, computeEffectivePriceCents } from "@/lib/pricing";
 import * as daisysim from "@/lib/daisysim";
-
-const MARKUP_PERCENT = Number(process.env.MARKUP_PERCENT ?? "0");
 
 export async function POST(req: Request) {
   const supabase = createClient();
@@ -20,6 +19,10 @@ export async function POST(req: Request) {
   }
 
   const settings = await getSettings();
+  const priceOverride = await getServicePriceRow("daisysim", String(country), service);
+  if (priceOverride?.is_enabled === false) {
+    return NextResponse.json({ error: "This service is currently unavailable" }, { status: 403 });
+  }
 
   try {
     const prices = await daisysim.getPrices(country, service);
@@ -27,7 +30,7 @@ export async function POST(req: Request) {
     // need to duplicate the conversion math.
     const tiers = prices.tiers.map((t) => ({
       ...t,
-      naira_cents: Math.round(t.price * (1 + MARKUP_PERCENT / 100) * settings.usd_to_ngn_rate * 100),
+      naira_cents: computeEffectivePriceCents(t.price, settings.usd_to_ngn_rate, priceOverride),
     }));
     return NextResponse.json({ ...prices, tiers });
   } catch (e) {

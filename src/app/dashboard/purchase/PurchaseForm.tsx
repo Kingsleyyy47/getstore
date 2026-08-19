@@ -5,12 +5,25 @@ import { formatNaira, type Rental } from "@/lib/types";
 
 type Phase = "idle" | "renting" | "waiting" | "done" | "error";
 
-export default function PurchaseForm() {
+interface FavoriteService {
+  serviceCode: string;
+  serviceName: string | null;
+}
+
+export default function PurchaseForm({
+  favorites = [],
+  extraActivationEnabled = false,
+}: {
+  favorites?: FavoriteService[];
+  extraActivationEnabled?: boolean;
+}) {
   const [service, setService] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [rental, setRental] = useState<Rental | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [extraBusy, setExtraBusy] = useState(false);
+  const [extraInfo, setExtraInfo] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -90,7 +103,46 @@ export default function PurchaseForm() {
   function reset() {
     setRental(null);
     setError(null);
+    setExtraInfo(null);
     setPhase("idle");
+  }
+
+  // "Get another code" on the SAME number, after one has already arrived --
+  // DaisySMS's getExtraActivation. Not offered until a code has actually
+  // been received, since DaisySMS may charge the platform a small penalty
+  // if one is requested but nothing ever comes in.
+  async function getAnotherCode() {
+    if (!rental) return;
+    setError(null);
+    setExtraInfo(null);
+    setExtraBusy(true);
+
+    const res = await fetch("/api/daisysms/extra-activation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rentalId: rental.id }),
+    });
+    const json = await res.json();
+    setExtraBusy(false);
+
+    if (!res.ok) {
+      setError(json.error ?? "Failed to request another code");
+      return;
+    }
+
+    setRental(json.rental);
+    setPhase("waiting");
+
+    if (json.readyAt) {
+      const waitSeconds = Math.max(0, json.readyAt - Math.floor(Date.now() / 1000));
+      setExtraInfo(
+        waitSeconds > 0
+          ? `This number needs about ${waitSeconds}s to switch back before it can receive another SMS -- we'll keep checking.`
+          : null
+      );
+    }
+
+    startPolling(json.rental.id);
   }
 
   if (rental) {
@@ -103,6 +155,12 @@ export default function PurchaseForm() {
             {rental.service} &middot; charged {formatNaira(rental.price_cents)}
           </div>
         </div>
+
+        {extraInfo && (
+          <div className="rounded-lg border border-[var(--border)] bg-black/5 px-4 py-3 text-sm text-[var(--text-muted)] dark:bg-white/5">
+            {extraInfo}
+          </div>
+        )}
 
         <div className="rounded-lg border border-[var(--border)] p-4">
           {rental.status === "waiting" && (
@@ -136,6 +194,11 @@ export default function PurchaseForm() {
               Mark done
             </button>
           )}
+          {extraActivationEnabled && (rental.status === "received" || rental.status === "done") && (
+            <button className="btn-ghost" onClick={getAnotherCode} disabled={extraBusy}>
+              {extraBusy ? "Requesting..." : "Get another code"}
+            </button>
+          )}
           <button className="btn-ghost" onClick={reset}>
             Rent another number
           </button>
@@ -151,6 +214,28 @@ export default function PurchaseForm() {
           {error}
         </div>
       )}
+      {favorites.length > 0 && (
+        <div>
+          <div className="label">Popular services</div>
+          <div className="flex flex-wrap gap-2">
+            {favorites.map((f) => (
+              <button
+                key={f.serviceCode}
+                type="button"
+                onClick={() => setService(f.serviceCode)}
+                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  service === f.serviceCode
+                    ? "border-brand bg-brand/10 text-brand"
+                    : "border-[var(--border)] hover:border-[var(--hover-border)]"
+                }`}
+              >
+                {f.serviceName ?? f.serviceCode}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         <label className="label" htmlFor="service">
           Service shortcode

@@ -124,6 +124,52 @@ export async function cancelRental(id: string): Promise<void> {
   throw new DaisySMSError(`Unexpected setStatus(cancel) response: ${body}`, body);
 }
 
+export interface ExtraActivation {
+  id: string;
+  phone: string;
+  /**
+   * Unix timestamp (seconds) the number will be ready to receive another
+   * SMS, or null if it's ready immediately. Per DaisySMS's docs this can
+   * shift earlier if other users finish their rentals on the same number
+   * sooner than expected -- treat it as an estimate, not a guarantee.
+   */
+  readyAt: number | null;
+}
+
+/**
+ * Requests an additional SMS code on a number that already received one,
+ * per DaisySMS's docs: "You may want to get an additional message after
+ * you've already received one previously on the same number." Pass the
+ * PREVIOUS activation's id (the DaisySMS-side id, not our rentals.id).
+ *
+ * Per the docs, DaisySMS may garnish a $0.20 penalty from the platform's
+ * balance if this is requested but no message ever arrives -- so this
+ * should only be offered to customers after they've genuinely received a
+ * code already, not as a free-for-all retry button.
+ */
+export async function getExtraActivation(previousActivationId: string): Promise<ExtraActivation> {
+  const { body } = await call({
+    action: "getExtraActivation",
+    activationId: previousActivationId,
+  });
+
+  if (body === "BAD_ID") {
+    throw new DaisySMSError(
+      "That rental can't request another code (missing, or already got one)",
+      body
+    );
+  }
+
+  const parts = body.split(":");
+  if (parts[0] === "ASLEEP" && parts.length === 4) {
+    return { id: parts[1], phone: parts[2], readyAt: Number(parts[3]) };
+  }
+  if (parts[0] === "ACCESS_NUMBER" && parts.length === 3) {
+    return { id: parts[1], phone: parts[2], readyAt: null };
+  }
+  throw new DaisySMSError(`Unexpected getExtraActivation response: ${body}`, body);
+}
+
 export async function getPrices(service?: string, country?: string): Promise<unknown> {
   const { body } = await call({ action: "getPrices", service, country });
   return JSON.parse(body);
@@ -132,4 +178,49 @@ export async function getPrices(service?: string, country?: string): Promise<unk
 export async function getPricesVerification(service?: string, country?: string): Promise<unknown> {
   const { body } = await call({ action: "getPricesVerification", service, country });
   return JSON.parse(body);
+}
+
+export interface CatalogEntry {
+  code: string;
+  costUsd: number;
+  available: number;
+}
+
+/**
+ * Flattens getPricesVerification()'s response into a simple per-service
+ * catalog for the admin pricing manager.
+ *
+ * PARTIALLY CONFIRMED: DaisySMS's own docs confirm the outer shape is
+ * "service => country => data" (i.e. { [serviceCode]: { [countryId]:
+ * <data> } }), matching what this function already assumed. What the docs
+ * don't spell out is the exact field names inside <data> -- only that it
+ * carries remaining-number counts (capped display at "100" for anything
+ * over 100) and pricing. This still assumes `{ cost: number; count:
+ * number }` per the same handler_api.php convention DaisySMS's other
+ * endpoints follow. For each service, this picks the LOWEST-cost country
+ * entry (so the displayed "cost" is the best price DaisySMS currently
+ * offers for that service). If the USA & Canada pricing page comes back
+ * empty, paste one real sample response and the field names can be
+ * corrected in a couple of minutes.
+ */
+export async function listCatalog(): Promise<CatalogEntry[]> {
+  const raw = (await getPricesVerification()) as Record<
+    string,
+    Record<string, { cost?: number; count?: number }>
+  >;
+  if (!raw || typeof raw !== "object") return [];
+
+  const entries: CatalogEntry[] = [];
+  for (const [code, byCountry] of Object.entries(raw)) {
+    if (!byCountry || typeof byCountry !== "object") continue;
+    let best: { cost: number; count: number } | null = null;
+    for (const countryEntry of Object.values(byCountry)) {
+      const cost = Number(countryEntry?.cost);
+      const count = Number(countryEntry?.count ?? 0);
+      if (!Number.isFinite(cost)) continue;
+      if (!best || cost < best.cost) best = { cost, count };
+    }
+    if (best) entries.push({ code, costUsd: best.cost, available: best.count });
+  }
+  return entries;
 }

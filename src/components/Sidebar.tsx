@@ -27,6 +27,9 @@ const adminItems: SidebarItem[] = [
   { href: "/admin/bulk-upload", label: "Bulk Upload", icon: <IconUpload /> },
   { href: "/admin/customers", label: "Customers", icon: <IconUsers /> },
   { href: "/admin/topups", label: "Top-ups", icon: <IconWallet /> },
+  { href: "/admin/pricing/usa-canada", label: "USA & Canada Pricing", icon: <IconPercent /> },
+  { href: "/admin/pricing/all-countries", label: "All Countries Pricing", icon: <IconPercent /> },
+  { href: "/admin/pricing/us-only", label: "US Only Pricing", icon: <IconPercent /> },
   { href: "/admin/announcements", label: "Announcements", icon: <IconBell /> },
   { href: "/admin/roles", label: "Roles", icon: <IconShield /> },
   { href: "/admin/support", label: "Support", icon: <IconMessage /> },
@@ -305,6 +308,15 @@ function IconSettings() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+    </svg>
+  );
+}
+function IconPercent() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="19" y1="5" x2="5" y2="19" />
+      <circle cx="6.5" cy="6.5" r="2.5" />
+      <circle cx="17.5" cy="17.5" r="2.5" />
     </svg>
   );
 }

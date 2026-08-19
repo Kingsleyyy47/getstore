@@ -1,5 +1,6 @@
 import { getSettings } from "@/lib/settings";
 import SettingsForm from "@/components/SettingsForm";
+import ExchangeRateForm from "@/components/ExchangeRateForm";
 import * as daisysms from "@/lib/daisysms";
 import * as daisysim from "@/lib/daisysim";
 import * as daisysim2 from "@/lib/daisysim2";
@@ -36,11 +37,17 @@ export default async function AdminSettingsPage() {
         <ProviderBalanceCard name="US Only platform balance" result={daisysim2Balance} />
       </div>
 
-      <SettingsForm
+      <ExchangeRateForm
         initialRate={settings.usd_to_ngn_rate}
+        initialMode={settings.exchange_rate_mode}
+        initialUpdatedAt={settings.exchange_rate_updated_at}
+      />
+
+      <SettingsForm
         initialNumbersEnabled={settings.numbers_enabled}
         initialCountriesEnabled={settings.countries_enabled}
         initialUsNumbersEnabled={settings.us_numbers_enabled}
+        initialExtraActivationEnabled={settings.extra_activation_enabled}
       />
     </div>
   );

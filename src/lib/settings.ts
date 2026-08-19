@@ -14,6 +14,9 @@ export interface AppSettings extends SupportLinks {
   numbers_enabled: boolean;
   countries_enabled: boolean;
   us_numbers_enabled: boolean;
+  exchange_rate_mode: "manual" | "live";
+  exchange_rate_updated_at: string | null;
+  extra_activation_enabled: boolean;
 }
 
 const FALLBACK: AppSettings = {
@@ -26,6 +29,9 @@ const FALLBACK: AppSettings = {
   telegram_url: null,
   twitter_url: null,
   instagram_url: null,
+  exchange_rate_mode: "manual",
+  exchange_rate_updated_at: null,
+  extra_activation_enabled: false,
 };
 
 /**
@@ -45,7 +51,7 @@ export async function getSettings(): Promise<AppSettings> {
   const { data } = await admin
     .from("app_settings")
     .select(
-      "usd_to_ngn_rate, numbers_enabled, countries_enabled, us_numbers_enabled, support_url, whatsapp_url, telegram_url, twitter_url, instagram_url"
+      "usd_to_ngn_rate, numbers_enabled, countries_enabled, us_numbers_enabled, support_url, whatsapp_url, telegram_url, twitter_url, instagram_url, exchange_rate_mode, exchange_rate_updated_at, extra_activation_enabled"
     )
     .eq("id", true)
     .single();
@@ -61,6 +67,9 @@ export async function getSettings(): Promise<AppSettings> {
     telegram_url: data.telegram_url ?? null,
     twitter_url: data.twitter_url ?? null,
     instagram_url: data.instagram_url ?? null,
+    exchange_rate_mode: (data.exchange_rate_mode as "manual" | "live") ?? "manual",
+    exchange_rate_updated_at: data.exchange_rate_updated_at ?? null,
+    extra_activation_enabled: data.extra_activation_enabled ?? false,
   };
 }
 

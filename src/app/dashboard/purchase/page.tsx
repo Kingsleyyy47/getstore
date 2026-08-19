@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getSettings } from "@/lib/settings";
+import { getFavoriteServices } from "@/lib/favorites";
 import { formatNaira, type Wallet } from "@/lib/types";
 import PurchaseForm from "./PurchaseForm";
 import PageHeader from "@/components/PageHeader";
@@ -10,9 +11,10 @@ export default async function PurchasePage() {
   const profile = await requireUser();
   const supabase = createClient();
 
-  const [{ data: wallet }, settings] = await Promise.all([
+  const [{ data: wallet }, settings, favorites] = await Promise.all([
     supabase.from("wallets").select("*").eq("user_id", profile.id).single(),
     getSettings(),
+    getFavoriteServices("daisysms"),
   ]);
 
   const w = wallet as Wallet | null;
@@ -50,7 +52,7 @@ export default async function PurchasePage() {
         }
       />
 
-      <PurchaseForm />
+      <PurchaseForm favorites={favorites} extraActivationEnabled={settings.extra_activation_enabled} />
     </div>
   );
 }

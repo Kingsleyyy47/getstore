@@ -169,3 +169,34 @@ export async function getHistory(opts?: {
     query: { page: opts?.page, per_page: opts?.perPage, status: opts?.status },
   });
 }
+
+export interface CatalogEntry {
+  code: string;
+  name: string;
+  costUsd: number;
+  available: number;
+}
+
+/**
+ * Flattens getServices() + getPrices() into a simple per-service catalog
+ * (cheapest tier per service, summed availability across tiers) for the
+ * admin pricing manager, scoped to one country at a time since DaisySim's
+ * services and prices are both per-country.
+ */
+export async function listCatalog(countryId: number): Promise<CatalogEntry[]> {
+  const services = await getServices(countryId);
+  const results = await Promise.all(
+    services.map(async (s): Promise<CatalogEntry | null> => {
+      try {
+        const prices = await getPrices(countryId, s.code);
+        if (prices.tiers.length === 0) return null;
+        const cheapest = prices.tiers.reduce((min, t) => (t.price < min.price ? t : min));
+        const available = prices.tiers.reduce((sum, t) => sum + t.available, 0);
+        return { code: s.code, name: s.name, costUsd: cheapest.price, available };
+      } catch {
+        return null;
+      }
+    })
+  );
+  return results.filter((r): r is CatalogEntry => r !== null);
+}

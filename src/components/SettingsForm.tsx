@@ -3,20 +3,20 @@
 import { useState } from "react";
 
 export default function SettingsForm({
-  initialRate,
   initialNumbersEnabled,
   initialCountriesEnabled,
   initialUsNumbersEnabled,
+  initialExtraActivationEnabled,
 }: {
-  initialRate: number;
   initialNumbersEnabled: boolean;
   initialCountriesEnabled: boolean;
   initialUsNumbersEnabled: boolean;
+  initialExtraActivationEnabled: boolean;
 }) {
-  const [rate, setRate] = useState(String(initialRate));
   const [numbersEnabled, setNumbersEnabled] = useState(initialNumbersEnabled);
   const [countriesEnabled, setCountriesEnabled] = useState(initialCountriesEnabled);
   const [usNumbersEnabled, setUsNumbersEnabled] = useState(initialUsNumbersEnabled);
+  const [extraActivationEnabled, setExtraActivationEnabled] = useState(initialExtraActivationEnabled);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -31,10 +31,10 @@ export default function SettingsForm({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        usdToNgnRate: Number(rate),
         numbersEnabled,
         countriesEnabled,
         usNumbersEnabled,
+        extraActivationEnabled,
       }),
     });
     const json = await res.json();
@@ -81,25 +81,18 @@ export default function SettingsForm({
         onChange={setUsNumbersEnabled}
       />
 
-      <div>
-        <label className="label" htmlFor="rate">
-          USD → NGN exchange rate
-        </label>
-        <input
-          className="input"
-          id="rate"
-          type="number"
-          step="0.01"
-          min="0"
-          value={rate}
-          onChange={(e) => setRate(e.target.value)}
-          required
+      <div className="border-t border-[var(--border)] pt-5">
+        <div className="mb-1 text-sm font-bold uppercase tracking-wide text-[var(--text-muted)]">
+          Get another code (DaisySMS)
+        </div>
+        <ToggleRow
+          title="Allow customers to request a second code on the same number"
+          description={
+            'After a customer\'s USA & Canada rental has already received one code, DaisySMS lets you ask for a second SMS on that exact same phone number, without renting a brand-new one -- useful for services that text a login code and then, moments later, a second confirmation code. It only becomes available on a rental after a code has already arrived (never before), and it does not cost the customer anything extra -- DaisySMS doesn\'t itemize a separate price for it. The one trade-off: DaisySMS may deduct a small $0.20 penalty from YOUR platform balance if a customer requests this and no second message ever shows up, so it\'s off by default. Turn it on once you\'re comfortable with that risk; when it\'s off, the "Get another code" button simply never appears to customers.'
+          }
+          checked={extraActivationEnabled}
+          onChange={setExtraActivationEnabled}
         />
-        <p className="mt-1 text-xs text-[var(--text-muted)]">
-          e.g. 1650 means $1.00 = ₦1,650.00. Shared by all three providers above to
-          convert their USD prices into the ₦ amount charged from a customer's wallet
-          (plus your markup).
-        </p>
       </div>
 
       <button className="btn-primary" type="submit" disabled={busy}>

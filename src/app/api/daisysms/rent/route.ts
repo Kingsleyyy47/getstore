@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/settings";
+import { getServicePriceRow, computeEffectivePriceCents } from "@/lib/pricing";
 import * as daisysms from "@/lib/daisysms";
 
 const MARKUP_PERCENT = Number(process.env.MARKUP_PERCENT ?? "0");
@@ -28,6 +29,14 @@ export async function POST(req: Request) {
 
   if (!service) {
     return NextResponse.json({ error: "service is required" }, { status: 400 });
+  }
+
+  // Admin-configured price override for this service, if any -- see
+  // src/lib/pricing.ts for the precedence (customer price override >
+  // auto-markup margin > the flat MARKUP_PERCENT fallback used below).
+  const priceOverride = await getServicePriceRow("daisysms", "", service);
+  if (priceOverride?.is_enabled === false) {
+    return NextResponse.json({ error: "This service is currently unavailable" }, { status: 403 });
   }
 
   const { data: wallet } = await supabase
@@ -61,7 +70,7 @@ export async function POST(req: Request) {
   }
 
   const basePriceDollars = rental.priceDollars ?? effectiveMaxPrice;
-  const chargeNairaCents = Math.round(basePriceDollars * (1 + MARKUP_PERCENT / 100) * rate * 100);
+  const chargeNairaCents = computeEffectivePriceCents(basePriceDollars, rate, priceOverride);
 
   if (chargeNairaCents > balanceNairaCents) {
     // Shouldn't normally happen given the cap above, but double-check
