@@ -48,6 +48,7 @@ export default async function AdminSettingsPage() {
         initialCountriesEnabled={settings.countries_enabled}
         initialUsNumbersEnabled={settings.us_numbers_enabled}
         initialExtraActivationEnabled={settings.extra_activation_enabled}
+        initialPocketfiEnabled={settings.pocketfi_enabled}
       />
     </div>
   );

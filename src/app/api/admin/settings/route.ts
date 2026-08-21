@@ -19,6 +19,7 @@ export async function POST(req: Request) {
   const countriesEnabled = Boolean(body?.countriesEnabled);
   const usNumbersEnabled = Boolean(body?.usNumbersEnabled);
   const extraActivationEnabled = Boolean(body?.extraActivationEnabled);
+  const pocketfiEnabled = Boolean(body?.pocketfiEnabled);
 
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -28,6 +29,7 @@ export async function POST(req: Request) {
       countries_enabled: countriesEnabled,
       us_numbers_enabled: usNumbersEnabled,
       extra_activation_enabled: extraActivationEnabled,
+      pocketfi_enabled: pocketfiEnabled,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     })

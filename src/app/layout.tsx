@@ -6,6 +6,15 @@ import PopupAnnouncement from "@/components/PopupAnnouncement";
 export const metadata: Metadata = {
   title: "GetStore",
   description: "Verified numbers and premium accounts, delivered instantly from your wallet.",
+  icons: {
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-64.png", sizes: "64x64", type: "image/png" },
+      { url: "/favicon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 const THEME_INIT_SCRIPT = `

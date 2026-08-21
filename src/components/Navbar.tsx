@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { getCurrentProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -21,8 +22,10 @@ export default async function Navbar() {
           href={profile ? "/dashboard" : "/"}
           className="flex shrink-0 items-center gap-2 whitespace-nowrap font-display text-lg font-semibold"
         >
-          <span className="h-7 w-7 shrink-0 rounded-lg bg-gradient-to-br from-brand to-emerald-400" />
-          GetStore
+          <Image src="/logo-mark.png" alt="" width={28} height={34} priority className="h-8 w-auto shrink-0" />
+          <span>
+            Get<span className="text-brand">Store</span>
+          </span>
         </Link>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">

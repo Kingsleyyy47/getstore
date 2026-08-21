@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { SupportLinks } from "@/lib/settings";
 import SocialLinks, { hasAnySocialLink } from "@/components/SocialLinks";
 
@@ -17,8 +18,10 @@ export default function AuthShowcase({ links }: { links: SupportLinks }) {
       />
 
       <div className="relative flex items-center gap-2 font-display text-lg font-semibold">
-        <span className="h-7 w-7 rounded-lg bg-white/90" />
-        GetStore
+        <Image src="/logo-mark.png" alt="" width={28} height={34} className="h-8 w-auto" />
+        <span>
+          Get<span className="text-emerald-300">Store</span>
+        </span>
       </div>
 
       <div className="relative">
@@ -42,7 +45,17 @@ export default function AuthShowcase({ links }: { links: SupportLinks }) {
       </div>
 
       <div className="relative space-y-6">
-        <div className="grid grid-cols-3 gap-6 border-t border-white/10 pt-6">
+        <div className="relative grid grid-cols-3 gap-6 overflow-hidden rounded-2xl border-t border-white/10 pt-6">
+          {/* Flags-around-the-mark artwork, faded into the panel behind the
+              stats -- reinforces "120+ Countries" without competing with
+              the numbers themselves. */}
+          <Image
+            src="/collage-countries.jpg"
+            alt=""
+            fill
+            className="pointer-events-none -z-10 object-cover opacity-[0.14] mix-blend-luminosity"
+            sizes="480px"
+          />
           <Stat value="120+" label="Countries" />
           <Stat value="24/7" label="Instant delivery" />
           <Stat value="10K+" label="Numbers delivered" />

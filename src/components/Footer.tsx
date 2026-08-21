@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { SupportLinks } from "@/lib/settings";
 import SocialLinks, { hasAnySocialLink } from "@/components/SocialLinks";
@@ -19,8 +20,10 @@ export default function Footer({ links }: { links: SupportLinks }) {
         <div className={`grid grid-cols-1 gap-10 ${showSupportColumn ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
           <div className="min-w-0">
             <div className="flex items-center gap-2 font-display text-lg font-semibold">
-              <span className="h-7 w-7 shrink-0 rounded-lg bg-white/90" />
-              GetStore
+              <Image src="/logo-mark.png" alt="" width={28} height={34} className="h-8 w-auto shrink-0" />
+              <span>
+                Get<span className="text-emerald-300">Store</span>
+              </span>
             </div>
             <p className="mt-3 max-w-xs text-sm text-emerald-100/70">
               Verified numbers and premium accounts, delivered instantly from one wallet.

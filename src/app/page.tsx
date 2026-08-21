@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/auth";
@@ -11,7 +12,15 @@ const HIGHLIGHTS = [
   { icon: <IconWallet />, title: "Trusted Wallet", body: "One balance for numbers, countries, and accounts." },
 ];
 
-const SERVICES = [
+interface ServiceCard {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  href: string;
+  image?: string;
+}
+
+const SERVICES: ServiceCard[] = [
   {
     icon: <IconPhone />,
     title: "Numbers",
@@ -23,12 +32,14 @@ const SERVICES = [
     title: "All Countries",
     body: "Browse 120+ countries by service and price tier before you commit to a number.",
     href: "/faq",
+    image: "/collage-countries.jpg",
   },
   {
     icon: <IconStore />,
     title: "Marketplace",
     body: "Buy ready-made account credentials — email, password, and 2FA — delivered on the spot.",
     href: "/faq",
+    image: "/collage-services.jpg",
   },
   {
     icon: <IconWallet />,
@@ -72,26 +83,15 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="relative mx-auto aspect-square w-full max-w-md overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-950 via-green-900 to-emerald-800">
-            <div className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-emerald-400/20 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-20 -right-10 h-64 w-64 rounded-full bg-emerald-300/10 blur-3xl" />
-            <div
-              className="pointer-events-none absolute inset-0 opacity-[0.08]"
-              style={{
-                backgroundImage:
-                  "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
-                backgroundSize: "40px 40px",
-              }}
+          <div className="relative mx-auto aspect-square w-full max-w-md overflow-hidden rounded-3xl shadow-[0_0_0_1px_rgb(var(--accent)/0.15)]">
+            <Image
+              src="/collage-services.jpg"
+              alt="GetStore unlocks Netflix, Spotify, AWS, and every major platform from one wallet"
+              fill
+              priority
+              className="object-cover"
+              sizes="(min-width: 1024px) 28rem, 100vw"
             />
-            <div className="relative flex h-full flex-col items-center justify-center gap-4 text-white">
-              <span className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10">
-                <IconCheckBadge />
-              </span>
-              <div className="text-center">
-                <div className="text-lg font-semibold">Verification, handled.</div>
-                <div className="mt-1 text-sm text-emerald-200/70">One wallet. Every service.</div>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -116,21 +116,14 @@ export default async function Home() {
           each section reads as its own distinct visual moment. */}
       <section className="border-t border-[var(--border)]">
         <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-2 lg:gap-16">
-          <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-3xl bg-gradient-to-br from-brand/10 to-brand/5">
-            <div
-              className="pointer-events-none absolute inset-0 opacity-[0.18]"
-              style={{
-                backgroundImage: "radial-gradient(rgb(var(--accent)) 1.5px, transparent 1.5px)",
-                backgroundSize: "22px 22px",
-              }}
+          <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-3xl shadow-[0_0_0_1px_rgb(var(--accent)/0.15)]">
+            <Image
+              src="/collage-countries.jpg"
+              alt="GetStore covers 120+ countries, from the USA and Nigeria to the UK, Canada, and beyond"
+              fill
+              className="object-cover"
+              sizes="(min-width: 1024px) 24rem, 100vw"
             />
-            <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-brand/10 blur-2xl" />
-            <div className="pointer-events-none absolute -bottom-10 -right-6 h-48 w-48 rounded-full bg-brand/15 blur-2xl" />
-            <div className="relative flex h-full items-center justify-center">
-              <span className="flex h-24 w-24 items-center justify-center rounded-full bg-brand/15 text-brand">
-                <IconWallet size={40} />
-              </span>
-            </div>
           </div>
 
           <div>
@@ -174,9 +167,22 @@ export default async function Home() {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {SERVICES.map((s) => (
               <div key={s.title} className="card overflow-hidden">
-                <div className="flex aspect-[4/3] items-center justify-center bg-gradient-to-br from-brand/15 to-brand/5 text-brand">
-                  {s.icon}
-                </div>
+                {s.image ? (
+                  <div className="relative aspect-[4/3]">
+                    <Image src={s.image} alt="" fill className="object-cover" sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" />
+                    <span className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur">
+                      {s.icon}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-gradient-to-br from-brand/20 via-brand/10 to-brand/5">
+                    <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-brand/15 blur-2xl" />
+                    <Image src="/logo-mark.png" alt="" width={200} height={240} className="h-24 w-auto drop-shadow-[0_8px_24px_rgb(var(--accent)/0.25)]" />
+                    <span className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-brand">
+                      {s.icon}
+                    </span>
+                  </div>
+                )}
                 <div className="p-5">
                   <div className="font-semibold">{s.title}</div>
                   <p className="mt-1 text-sm text-[var(--text-muted)]">{s.body}</p>
@@ -290,14 +296,6 @@ function IconUsers() {
       <path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2" />
       <path d="M17 4.5a3 3 0 0 1 0 6" />
       <path d="M22 21v-2a5 5 0 0 0-3.5-4.77" />
-    </svg>
-  );
-}
-function IconCheckBadge() {
-  return (
-    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3Z" />
-      <path d="m9 12 2 2 4-4" />
     </svg>
   );
 }

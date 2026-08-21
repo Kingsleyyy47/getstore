@@ -1,7 +1,9 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { getSettings } from "@/lib/settings";
 import { formatNaira, type TopupRequest } from "@/lib/types";
 import { requestTopup } from "./actions";
+import PocketfiTopup from "./PocketfiTopup";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { IconPlus } from "@/components/icons";
@@ -14,12 +16,18 @@ export default async function TopupPage({
   const profile = await requireUser();
   const supabase = createClient();
 
-  const { data: requests } = await supabase
-    .from("topup_requests")
-    .select("*")
-    .eq("user_id", profile.id)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  // getSettings() reads app_settings through the service-role client, since
+  // its RLS policy restricts direct reads to admins (see supabase/003_settings.sql)
+  // -- same helper the Numbers/purchase pages use for their enabled flags.
+  const [{ data: requests }, settings] = await Promise.all([
+    supabase
+      .from("topup_requests")
+      .select("*")
+      .eq("user_id", profile.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    getSettings(),
+  ]);
 
   const requestList = (requests ?? []) as TopupRequest[];
 
@@ -28,7 +36,11 @@ export default async function TopupPage({
       <PageHeader
         icon={<IconPlus />}
         title="Add funds"
-        subtitle="Submit a top-up request below. An admin will review and credit your wallet manually. (Automatic card payments are coming soon.)"
+        subtitle={
+          settings.pocketfi_enabled
+            ? "Pay instantly with card, bank, or a dedicated transfer account below -- or submit a manual request for an admin to review."
+            : "Submit a top-up request below. An admin will review and credit your wallet manually."
+        }
       />
 
       {searchParams.error && (
@@ -41,6 +53,8 @@ export default async function TopupPage({
           Top-up request submitted. It will be credited once approved.
         </div>
       )}
+
+      {settings.pocketfi_enabled && <PocketfiTopup />}
 
       <form action={requestTopup} className="card space-y-4 p-6">
         <div>

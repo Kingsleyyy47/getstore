@@ -7,16 +7,19 @@ export default function SettingsForm({
   initialCountriesEnabled,
   initialUsNumbersEnabled,
   initialExtraActivationEnabled,
+  initialPocketfiEnabled,
 }: {
   initialNumbersEnabled: boolean;
   initialCountriesEnabled: boolean;
   initialUsNumbersEnabled: boolean;
   initialExtraActivationEnabled: boolean;
+  initialPocketfiEnabled: boolean;
 }) {
   const [numbersEnabled, setNumbersEnabled] = useState(initialNumbersEnabled);
   const [countriesEnabled, setCountriesEnabled] = useState(initialCountriesEnabled);
   const [usNumbersEnabled, setUsNumbersEnabled] = useState(initialUsNumbersEnabled);
   const [extraActivationEnabled, setExtraActivationEnabled] = useState(initialExtraActivationEnabled);
+  const [pocketfiEnabled, setPocketfiEnabled] = useState(initialPocketfiEnabled);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -35,6 +38,7 @@ export default function SettingsForm({
         countriesEnabled,
         usNumbersEnabled,
         extraActivationEnabled,
+        pocketfiEnabled,
       }),
     });
     const json = await res.json();
@@ -92,6 +96,18 @@ export default function SettingsForm({
           }
           checked={extraActivationEnabled}
           onChange={setExtraActivationEnabled}
+        />
+      </div>
+
+      <div className="border-t border-[var(--border)] pt-5">
+        <div className="mb-1 text-sm font-bold uppercase tracking-wide text-[var(--text-muted)]">
+          Automated funding (PocketFi)
+        </div>
+        <ToggleRow
+          title="Enable card / bank / virtual account top-ups"
+          description="When enabled, the Add Funds page offers instant PocketFi checkout links and dedicated virtual accounts alongside manual top-ups -- PocketFi's webhook credits the wallet automatically, no admin approval needed. Requires POCKETFI_BUSINESS_ID and POCKETFI_SECRET_KEY to be set (see .env.example) and the webhook URL configured on your PocketFi dashboard."
+          checked={pocketfiEnabled}
+          onChange={setPocketfiEnabled}
         />
       </div>
 
