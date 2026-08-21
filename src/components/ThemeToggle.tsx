@@ -30,7 +30,12 @@ export default function ThemeToggle() {
       onClick={toggle}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text)] transition-colors hover:border-brand"
+      /* Lives in the navbar, which is now always the dark brand banner
+         regardless of what this button switches the page content to --
+         so its own styling is hardcoded for a dark background rather than
+         following var(--text)/var(--border), which would go invisible in
+         light mode. */
+      className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/80 transition-colors hover:border-emerald-400/50 hover:text-white"
     >
       {isDark ? (
         // sun icon (click to go light)

@@ -1,14 +1,22 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/settings";
-import { createVirtualAccount } from "@/lib/pocketfi";
+import { getOrCreatePrimaryAccount } from "@/lib/pocketfi-virtual-account";
 
 /**
- * Returns the signed-in customer's dedicated PocketFi virtual account,
+ * Returns the signed-in customer's primary PocketFi virtual account,
  * creating one on first call. Funds sent to this account number are
  * credited automatically via /api/webhooks/pocketfi -- no checkout flow,
  * no admin approval.
+ *
+ * Also flags `promptNewProvider` when the admin has switched the site-wide
+ * default bank provider (Admin -> Settings) since this account was issued
+ * and the customer hasn't already said "keep my current one" for that
+ * exact change -- the frontend then offers a choice: keep the existing
+ * account (POST .../keep) or get a new one on the new provider
+ * (POST .../switch). See src/lib/pocketfi-virtual-account.ts for the
+ * mechanics -- switching never deletes the old account, so it keeps
+ * working if money ever lands on it anyway.
  */
 export async function GET() {
   const supabase = createClient();
@@ -22,39 +30,13 @@ export async function GET() {
     return NextResponse.json({ error: "Bank transfer top-ups are not available right now" }, { status: 403 });
   }
 
-  const admin = createAdminClient();
-
-  const { data: existing } = await admin
-    .from("pocketfi_virtual_accounts")
-    .select("*")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (existing) return NextResponse.json({ account: existing });
-
-  const { data: profile } = await admin.from("profiles").select("full_name, email").eq("id", user.id).single();
-
   try {
-    const created = await createVirtualAccount({
-      email: profile?.email ?? user.email!,
-      fullName: profile?.full_name ?? user.email!,
-      userId: user.id,
-    });
-
-    const { data: saved, error: saveErr } = await admin
-      .from("pocketfi_virtual_accounts")
-      .insert({
-        user_id: user.id,
-        provider_account_id: created.providerAccountId,
-        account_number: created.accountNumber,
-        bank_name: created.bankName,
-        account_name: created.accountName,
-      })
-      .select()
-      .single();
-
-    if (saveErr) return NextResponse.json({ error: saveErr.message }, { status: 500 });
-    return NextResponse.json({ account: saved });
+    const { account, promptNewProvider } = await getOrCreatePrimaryAccount(
+      user.id,
+      user.email!,
+      settings.pocketfi_bank_provider
+    );
+    return NextResponse.json({ account, promptNewProvider });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? "Could not create a virtual account" }, { status: 502 });
   }

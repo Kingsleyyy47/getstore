@@ -2,24 +2,45 @@
 
 import { useState } from "react";
 
+// Common PocketFi partner banks for dedicated virtual accounts. This list
+// is a best-effort starting point (not confirmed against PocketFi's actual
+// provider catalog) -- "Other" always stays available so the admin can
+// type any provider code PocketFi's dashboard/docs actually list.
+const KNOWN_BANK_PROVIDERS = [
+  { value: "paga", label: "Paga" },
+  { value: "kuda", label: "Kuda Bank" },
+  { value: "palmpay", label: "PalmPay" },
+  { value: "wema", label: "Wema Bank" },
+  { value: "providus", label: "Providus Bank" },
+  { value: "titan", label: "Titan Trust Bank" },
+  { value: "9psb", label: "9 Payment Service Bank" },
+];
+
 export default function SettingsForm({
   initialNumbersEnabled,
   initialCountriesEnabled,
   initialUsNumbersEnabled,
   initialExtraActivationEnabled,
   initialPocketfiEnabled,
+  initialPocketfiBankProvider,
 }: {
   initialNumbersEnabled: boolean;
   initialCountriesEnabled: boolean;
   initialUsNumbersEnabled: boolean;
   initialExtraActivationEnabled: boolean;
   initialPocketfiEnabled: boolean;
+  initialPocketfiBankProvider: string;
 }) {
   const [numbersEnabled, setNumbersEnabled] = useState(initialNumbersEnabled);
   const [countriesEnabled, setCountriesEnabled] = useState(initialCountriesEnabled);
   const [usNumbersEnabled, setUsNumbersEnabled] = useState(initialUsNumbersEnabled);
   const [extraActivationEnabled, setExtraActivationEnabled] = useState(initialExtraActivationEnabled);
   const [pocketfiEnabled, setPocketfiEnabled] = useState(initialPocketfiEnabled);
+  const isKnownProvider = KNOWN_BANK_PROVIDERS.some((p) => p.value === initialPocketfiBankProvider);
+  const [pocketfiBankProvider, setPocketfiBankProvider] = useState(
+    isKnownProvider ? initialPocketfiBankProvider : "other"
+  );
+  const [customBankProvider, setCustomBankProvider] = useState(isKnownProvider ? "" : initialPocketfiBankProvider);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -39,6 +60,7 @@ export default function SettingsForm({
         usNumbersEnabled,
         extraActivationEnabled,
         pocketfiEnabled,
+        pocketfiBankProvider: pocketfiBankProvider === "other" ? customBankProvider : pocketfiBankProvider,
       }),
     });
     const json = await res.json();
@@ -105,10 +127,46 @@ export default function SettingsForm({
         </div>
         <ToggleRow
           title="Enable card / bank / virtual account top-ups"
-          description="When enabled, the Add Funds page offers instant PocketFi checkout links and dedicated virtual accounts alongside manual top-ups -- PocketFi's webhook credits the wallet automatically, no admin approval needed. Requires POCKETFI_BUSINESS_ID and POCKETFI_SECRET_KEY to be set (see .env.example) and the webhook URL configured on your PocketFi dashboard."
+          description="When enabled, the Add Funds page offers instant PocketFi checkout links and dedicated virtual accounts alongside manual top-ups -- PocketFi's webhook credits the wallet automatically, no admin approval needed. Requires POCKETFI_BUSINESS_ID, POCKETFI_PUBLIC_KEY, and POCKETFI_SECRET_KEY to be set (see .env.example) and the webhook URL configured on your PocketFi dashboard."
           checked={pocketfiEnabled}
           onChange={setPocketfiEnabled}
         />
+
+        <div className="mt-4 rounded-lg border border-[var(--border)] p-4">
+          <div className="font-semibold">Virtual account bank provider</div>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Which partner bank issues NEW customers' dedicated virtual accounts. Every
+            customer's account number is permanent once issued -- changing this here never
+            moves or reissues an existing customer's account. Instead, the next time an
+            existing customer with an account on a different provider opens Add Funds, they're
+            offered a choice: keep the account they already have, or switch to a new one on{" "}
+            {KNOWN_BANK_PROVIDERS.find((p) => p.value === pocketfiBankProvider)?.label ??
+              customBankProvider ??
+              "the new provider"}
+            . Both keep working either way.
+          </p>
+          <select
+            className="input mt-3"
+            value={pocketfiBankProvider}
+            onChange={(e) => setPocketfiBankProvider(e.target.value)}
+          >
+            {KNOWN_BANK_PROVIDERS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+            <option value="other">Other (type the provider code)</option>
+          </select>
+          {pocketfiBankProvider === "other" && (
+            <input
+              className="input mt-2"
+              type="text"
+              placeholder="Provider code, exactly as PocketFi's dashboard/docs list it"
+              value={customBankProvider}
+              onChange={(e) => setCustomBankProvider(e.target.value)}
+            />
+          )}
+        </div>
       </div>
 
       <button className="btn-primary" type="submit" disabled={busy}>

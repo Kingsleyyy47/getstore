@@ -83,14 +83,14 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="relative mx-auto aspect-square w-full max-w-md overflow-hidden rounded-3xl shadow-[0_0_0_1px_rgb(var(--accent)/0.15)]">
+          <div className="relative mx-auto aspect-[1600/893] w-full max-w-lg overflow-hidden rounded-3xl shadow-[0_0_0_1px_rgb(var(--accent)/0.15)]">
             <Image
               src="/collage-services.jpg"
               alt="GetStore unlocks Netflix, Spotify, AWS, and every major platform from one wallet"
               fill
               priority
-              className="object-cover"
-              sizes="(min-width: 1024px) 28rem, 100vw"
+              className="object-contain"
+              sizes="(min-width: 1024px) 32rem, 100vw"
             />
           </div>
         </div>
@@ -116,13 +116,13 @@ export default async function Home() {
           each section reads as its own distinct visual moment. */}
       <section className="border-t border-[var(--border)]">
         <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-2 lg:gap-16">
-          <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-3xl shadow-[0_0_0_1px_rgb(var(--accent)/0.15)]">
+          <div className="relative mx-auto aspect-[1536/1024] w-full max-w-md overflow-hidden rounded-3xl shadow-[0_0_0_1px_rgb(var(--accent)/0.15)]">
             <Image
               src="/collage-countries.jpg"
               alt="GetStore covers 120+ countries, from the USA and Nigeria to the UK, Canada, and beyond"
               fill
-              className="object-cover"
-              sizes="(min-width: 1024px) 24rem, 100vw"
+              className="object-contain"
+              sizes="(min-width: 1024px) 28rem, 100vw"
             />
           </div>
 

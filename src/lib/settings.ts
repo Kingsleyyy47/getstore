@@ -18,6 +18,7 @@ export interface AppSettings extends SupportLinks {
   exchange_rate_updated_at: string | null;
   extra_activation_enabled: boolean;
   pocketfi_enabled: boolean;
+  pocketfi_bank_provider: string;
 }
 
 const FALLBACK: AppSettings = {
@@ -34,6 +35,7 @@ const FALLBACK: AppSettings = {
   exchange_rate_updated_at: null,
   extra_activation_enabled: false,
   pocketfi_enabled: false,
+  pocketfi_bank_provider: "paga",
 };
 
 /**
@@ -53,7 +55,7 @@ export async function getSettings(): Promise<AppSettings> {
   const { data } = await admin
     .from("app_settings")
     .select(
-      "usd_to_ngn_rate, numbers_enabled, countries_enabled, us_numbers_enabled, support_url, whatsapp_url, telegram_url, twitter_url, instagram_url, exchange_rate_mode, exchange_rate_updated_at, extra_activation_enabled, pocketfi_enabled"
+      "usd_to_ngn_rate, numbers_enabled, countries_enabled, us_numbers_enabled, support_url, whatsapp_url, telegram_url, twitter_url, instagram_url, exchange_rate_mode, exchange_rate_updated_at, extra_activation_enabled, pocketfi_enabled, pocketfi_bank_provider"
     )
     .eq("id", true)
     .single();
@@ -73,6 +75,7 @@ export async function getSettings(): Promise<AppSettings> {
     exchange_rate_updated_at: data.exchange_rate_updated_at ?? null,
     extra_activation_enabled: data.extra_activation_enabled ?? false,
     pocketfi_enabled: data.pocketfi_enabled ?? false,
+    pocketfi_bank_provider: data.pocketfi_bank_provider ?? "paga",
   };
 }
 

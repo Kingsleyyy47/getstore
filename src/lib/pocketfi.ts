@@ -109,11 +109,21 @@ export interface VirtualAccountResult {
  * on some banks (e.g. PalmPay) require NIN/BVN-level KYC on the business
  * account -- if this call fails with a KYC-related error, that's a
  * PocketFi dashboard verification issue, not a bug here.
+ *
+ * bankProvider selects which partner bank issues the account (PocketFi
+ * supports several -- Paga, PalmPay, Wema, etc.). It's admin-configurable
+ * (app_settings.pocketfi_bank_provider, defaults to "paga") rather than
+ * hardcoded, so the admin can swap it from Admin -> Settings if one
+ * partner has an outage. IMPORTANT -- the field name below (`provider`)
+ * and the exact provider codes PocketFi accepts ("paga", "palmpay", ...)
+ * are unverified against PocketFi's real API reference; confirm against
+ * their docs/dashboard and adjust here if a call 4xxs on this field.
  */
 export async function createVirtualAccount(params: {
   email: string;
   fullName: string;
   userId: string; // used as our own external reference
+  bankProvider: string;
 }): Promise<VirtualAccountResult> {
   const businessId = requireEnv("POCKETFI_BUSINESS_ID");
 
@@ -124,6 +134,7 @@ export async function createVirtualAccount(params: {
       email: params.email,
       full_name: params.fullName,
       external_reference: params.userId,
+      provider: params.bankProvider,
     }),
   });
 

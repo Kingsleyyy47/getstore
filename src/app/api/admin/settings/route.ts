@@ -20,6 +20,10 @@ export async function POST(req: Request) {
   const usNumbersEnabled = Boolean(body?.usNumbersEnabled);
   const extraActivationEnabled = Boolean(body?.extraActivationEnabled);
   const pocketfiEnabled = Boolean(body?.pocketfiEnabled);
+  const pocketfiBankProvider = String(body?.pocketfiBankProvider ?? "").trim().toLowerCase();
+  if (!pocketfiBankProvider) {
+    return NextResponse.json({ error: "Pick a bank provider for virtual accounts" }, { status: 400 });
+  }
 
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -30,6 +34,7 @@ export async function POST(req: Request) {
       us_numbers_enabled: usNumbersEnabled,
       extra_activation_enabled: extraActivationEnabled,
       pocketfi_enabled: pocketfiEnabled,
+      pocketfi_bank_provider: pocketfiBankProvider,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     })

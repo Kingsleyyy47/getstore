@@ -49,6 +49,7 @@ export default async function AdminSettingsPage() {
         initialUsNumbersEnabled={settings.us_numbers_enabled}
         initialExtraActivationEnabled={settings.extra_activation_enabled}
         initialPocketfiEnabled={settings.pocketfi_enabled}
+        initialPocketfiBankProvider={settings.pocketfi_bank_provider}
       />
     </div>
   );
