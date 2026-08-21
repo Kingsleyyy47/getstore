@@ -17,7 +17,7 @@ interface ServiceCard {
   title: string;
   body: string;
   href: string;
-  image?: string;
+  image: string;
 }
 
 const SERVICES: ServiceCard[] = [
@@ -26,6 +26,7 @@ const SERVICES: ServiceCard[] = [
     title: "Numbers",
     body: "Rent a verification number in seconds and receive your OTP the moment it arrives.",
     href: "/faq",
+    image: "/card-numbers.jpg",
   },
   {
     icon: <IconGlobe />,
@@ -46,6 +47,7 @@ const SERVICES: ServiceCard[] = [
     title: "Wallet",
     body: "Fund once, spend everywhere. Every purchase draws from the same simple balance.",
     href: "/faq",
+    image: "/card-wallet.jpg",
   },
 ];
 
@@ -167,22 +169,12 @@ export default async function Home() {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {SERVICES.map((s) => (
               <div key={s.title} className="card overflow-hidden">
-                {s.image ? (
-                  <div className="relative aspect-[4/3]">
-                    <Image src={s.image} alt="" fill className="object-cover" sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" />
-                    <span className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur">
-                      {s.icon}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-gradient-to-br from-brand/20 via-brand/10 to-brand/5">
-                    <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-brand/15 blur-2xl" />
-                    <Image src="/logo-mark.png" alt="" width={200} height={240} className="h-24 w-auto drop-shadow-[0_8px_24px_rgb(var(--accent)/0.25)]" />
-                    <span className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-brand">
-                      {s.icon}
-                    </span>
-                  </div>
-                )}
+                <div className="relative aspect-[4/3]">
+                  <Image src={s.image} alt="" fill className="object-cover" sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" />
+                  <span className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur">
+                    {s.icon}
+                  </span>
+                </div>
                 <div className="p-5">
                   <div className="font-semibold">{s.title}</div>
                   <p className="mt-1 text-sm text-[var(--text-muted)]">{s.body}</p>
