@@ -9,6 +9,14 @@ import { getOrCreatePrimaryAccount } from "@/lib/pocketfi-virtual-account";
  * credited automatically via /api/webhooks/pocketfi -- no checkout flow,
  * no admin approval.
  *
+ * PocketFi requires a phone number to create an account. If this is the
+ * customer's first account and they don't have one saved yet, this
+ * responds with `{ phoneRequired: true }` (200, not an error) instead of
+ * creating anything -- the frontend then shows a phone input and re-calls
+ * this same endpoint as a POST with `{ phone }` in the body. Once a phone
+ * is on file it's reused for any future account (e.g. switching providers)
+ * and never asked for again.
+ *
  * Also flags `promptNewProvider` when the admin has switched the site-wide
  * default bank provider (Admin -> Settings) since this account was issued
  * and the customer hasn't already said "keep my current one" for that
@@ -19,6 +27,19 @@ import { getOrCreatePrimaryAccount } from "@/lib/pocketfi-virtual-account";
  * working if money ever lands on it anyway.
  */
 export async function GET() {
+  return handle(null);
+}
+
+/** Same as GET, but for supplying a phone number on first use -- see the
+ * comment above. Body: `{ phone: string }`. */
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => null);
+  const phone = typeof body?.phone === "string" ? body.phone.trim() : undefined;
+  if (!phone) return NextResponse.json({ error: "phone is required" }, { status: 400 });
+  return handle(phone);
+}
+
+async function handle(suppliedPhone: string | undefined) {
   const supabase = createClient();
   const {
     data: { user },
@@ -31,12 +52,16 @@ export async function GET() {
   }
 
   try {
-    const { account, promptNewProvider } = await getOrCreatePrimaryAccount(
+    const result = await getOrCreatePrimaryAccount(
       user.id,
       user.email!,
-      settings.pocketfi_bank_provider
+      settings.pocketfi_bank_provider,
+      suppliedPhone
     );
-    return NextResponse.json({ account, promptNewProvider });
+    if ("phoneRequired" in result) {
+      return NextResponse.json({ phoneRequired: true });
+    }
+    return NextResponse.json({ account: result.account, promptNewProvider: result.promptNewProvider });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? "Could not create a virtual account" }, { status: 502 });
   }

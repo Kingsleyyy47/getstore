@@ -2,18 +2,18 @@
 
 import { useState } from "react";
 
-// Common PocketFi partner banks for dedicated virtual accounts. This list
-// is a best-effort starting point (not confirmed against PocketFi's actual
-// provider catalog) -- "Other" always stays available so the admin can
-// type any provider code PocketFi's dashboard/docs actually list.
+// PocketFi's actual supported virtual-account bank providers, confirmed
+// against developer.pocketfi.ng's "Create Virtual Account" docs -- these
+// are the ONLY codes their `bank` field accepts. PalmPay additionally
+// requires NIN/BVN-level KYC on the business account per those same docs
+// (see src/lib/pocketfi.ts) -- "Other" stays available in case PocketFi
+// adds a new provider before this list is updated.
 const KNOWN_BANK_PROVIDERS = [
+  { value: "saveheaven", label: "SaveHeaven" },
   { value: "paga", label: "Paga" },
   { value: "kuda", label: "Kuda Bank" },
-  { value: "palmpay", label: "PalmPay" },
-  { value: "wema", label: "Wema Bank" },
-  { value: "providus", label: "Providus Bank" },
-  { value: "titan", label: "Titan Trust Bank" },
   { value: "9psb", label: "9 Payment Service Bank" },
+  { value: "palmpay", label: "PalmPay (requires NIN/BVN)" },
 ];
 
 export default function SettingsForm({

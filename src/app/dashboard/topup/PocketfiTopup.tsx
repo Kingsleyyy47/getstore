@@ -27,14 +27,31 @@ function VirtualAccountCard() {
   const [switching, setSwitching] = useState<"switch" | "keep" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fetched, setFetched] = useState(false);
+  const [needsPhone, setNeedsPhone] = useState(false);
+  const [phone, setPhone] = useState("");
 
-  async function loadAccount() {
+  // PocketFi requires a phone number to create an account. The API tells
+  // us on the first call (via `phoneRequired`) if this customer doesn't
+  // have one saved yet -- when that happens, this shows a small inline
+  // form instead of erroring, and re-submits with the phone included.
+  async function loadAccount(phoneToSubmit?: string) {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/pocketfi/virtual-account");
+      const res = phoneToSubmit
+        ? await fetch("/api/pocketfi/virtual-account", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone: phoneToSubmit }),
+          })
+        : await fetch("/api/pocketfi/virtual-account");
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error ?? "Could not get a virtual account");
+      if (body.phoneRequired) {
+        setNeedsPhone(true);
+        return;
+      }
+      setNeedsPhone(false);
       setAccount(body.account);
       setPromptNewProvider(body.promptNewProvider ?? null);
     } catch (err: any) {
@@ -43,6 +60,12 @@ function VirtualAccountCard() {
       setLoading(false);
       setFetched(true);
     }
+  }
+
+  function submitPhone(e: React.FormEvent) {
+    e.preventDefault();
+    if (!phone.trim()) return;
+    loadAccount(phone.trim());
   }
 
   async function chooseSwitch() {
@@ -86,10 +109,29 @@ function VirtualAccountCard() {
           Get a dedicated account number -- any transfer to it credits your wallet automatically.
         </div>
       </div>
-      {!fetched && (
-        <button className="btn-ghost w-full" onClick={loadAccount} disabled={loading}>
+      {!fetched && !needsPhone && (
+        <button className="btn-ghost w-full" onClick={() => loadAccount()} disabled={loading}>
           {loading ? "Loading…" : "Get my account number"}
         </button>
+      )}
+      {needsPhone && (
+        <form onSubmit={submitPhone} className="space-y-2">
+          <p className="text-sm text-[var(--text-muted)]">
+            Your bank needs a phone number on file to issue this account -- we'll save it to your
+            profile so you're only asked once.
+          </p>
+          <input
+            className="input"
+            type="tel"
+            placeholder="e.g. 08012345678"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            required
+          />
+          <button className="btn-primary w-full" type="submit" disabled={loading}>
+            {loading ? "Submitting…" : "Continue"}
+          </button>
+        </form>
       )}
       {error && <div className="text-sm text-red-400">{error}</div>}
       {account && (

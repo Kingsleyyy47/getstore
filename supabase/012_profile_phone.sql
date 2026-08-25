@@ -1,0 +1,14 @@
+-- ----------------------------------------------------------------------------
+-- profiles.phone -- required for PocketFi
+--
+-- PocketFi's real API (confirmed against developer.pocketfi.ng's docs,
+-- which is what fixed the "Bank transfer, anytime" 404) requires
+-- first_name/last_name/phone on BOTH POST /api/v1/checkout/request and
+-- POST /api/v1/virtual-accounts/create. profiles previously only stored
+-- full_name and email, with no phone number anywhere in the app -- this
+-- column is where it's collected the first time a customer uses a PocketFi
+-- flow (see /api/pocketfi/virtual-account and /api/pocketfi/checkout).
+-- NULL until then; first_name/last_name are still derived from full_name
+-- on the fly (see src/lib/pocketfi.ts's splitName), no separate columns.
+-- ----------------------------------------------------------------------------
+alter table profiles add column if not exists phone text;

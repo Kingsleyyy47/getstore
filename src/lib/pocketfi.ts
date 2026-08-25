@@ -6,27 +6,34 @@ import crypto from "node:crypto";
  * links, dedicated virtual bank accounts, webhooks signed with
  * HMAC-SHA512).
  *
- * IMPORTANT -- verify against PocketFi's actual API reference before going
- * live. This was scaffolded from a description of the endpoints (Initialize
- * Payment / Create Virtual Account / webhook signature verification /
- * NIN-BVN identity verification) rather than the literal spec text, so the
- * request/response field names and paths below are best-effort. If a call
- * fails with a 4xx complaining about an unknown field or wrong path, check
- * PocketFi's docs and adjust the shapes in this file only -- every route
- * that uses PocketFi goes through here, so this is the one place to fix.
+ * Endpoint paths, request fields, and response shapes below are taken
+ * DIRECTLY from PocketFi's real developer docs (developer.pocketfi.ng) --
+ * this replaced an earlier version that was scaffolded from a loose
+ * description rather than the literal doc text, which is why virtual
+ * account creation was 404ing (it was POSTing to a made-up path). If a call
+ * still fails with a 4xx/404, re-check the current docs -- every route that
+ * uses PocketFi goes through this file, so it's the one place to fix.
  *
  * NOTE: PocketFi's naming is the reverse of what you'd expect. The "Secret
  * API Key" is a plain hex string used ONLY to verify inbound webhook
- * signatures (HMAC) -- it is NOT a valid bearer token. The "Public API Key"
- * is the Laravel Sanctum-style `id|token` credential that actually
- * authenticates outbound API calls (looks like `1|abc123...`), so that's
- * what goes in the Authorization header below.
+ * signatures (HMAC) -- it is NOT a valid bearer token. The Bearer token
+ * used to authenticate outbound API calls is the Sanctum-style `id|token`
+ * credential shown in the docs' auth example (`352|3r5ZnULMaBfK...`), which
+ * on PocketFi's dashboard is labeled "Public API Key" -- that's
+ * POCKETFI_PUBLIC_KEY below.
  *
  * Env vars required (see .env.example):
  *   POCKETFI_BUSINESS_ID
  *   POCKETFI_PUBLIC_KEY  (the Sanctum `id|token` credential -- outbound API auth)
  *   POCKETFI_SECRET_KEY  (the hex string -- webhook HMAC verification only)
- *   POCKETFI_BASE_URL (defaults to https://api.pocketfi.ng)
+ *   POCKETFI_BASE_URL (defaults to https://api.pocketfi.ng; every path below
+ *     already includes the "/api/v1" prefix per the docs' own per-endpoint
+ *     headers, e.g. "POST /api/v1/checkout/request" -- don't add it again
+ *     in POCKETFI_BASE_URL. For PocketFi's sandbox, the docs give a
+ *     DIFFERENT base of https://api.pocketfi.ng/api/test with no further
+ *     "/v1/..." breakdown shown -- if you need sandbox testing, confirm
+ *     with PocketFi whether the same "/checkout/request" etc. suffixes
+ *     apply under /api/test before relying on it.)
  */
 
 const BASE_URL = process.env.POCKETFI_BASE_URL || "https://api.pocketfi.ng";
@@ -44,6 +51,7 @@ async function pocketfiFetch<T = any>(path: string, init: RequestInit = {}): Pro
     ...init,
     headers: {
       "Content-Type": "application/json",
+      Accept: "application/json",
       Authorization: `Bearer ${publicKey}`,
       ...(init.headers ?? {}),
     },
@@ -52,51 +60,81 @@ async function pocketfiFetch<T = any>(path: string, init: RequestInit = {}): Pro
 
   const body = await res.json().catch(() => null);
   if (!res.ok) {
-    const message = body?.message || body?.error || `PocketFi request failed (${res.status})`;
+    // Per the docs' error format: { status: false, message: "...", errors?: {...} }.
+    // On a 422, `errors` names exactly which field(s) failed validation --
+    // surface that if present, since "Unprocessable Entity" alone isn't
+    // actionable.
+    const validation = body?.errors ? ` (${JSON.stringify(body.errors)})` : "";
+    const message = (body?.message ? `${body.message}${validation}` : null) ?? `PocketFi request failed (${res.status})`;
     throw new Error(message);
   }
   return body as T;
 }
 
+/** Best-effort split of a single "full name" field into PocketFi's required
+ * first_name/last_name pair -- our own profiles table only stores one
+ * combined name field. Falls back to "Customer" for the surname when
+ * there's nothing to split (PocketFi requires both fields to be non-empty). */
+export function splitName(fullName: string | null | undefined, fallback: string): { firstName: string; lastName: string } {
+  const source = (fullName ?? fallback).trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+  }
+  return { firstName: parts[0] || fallback, lastName: "Customer" };
+}
+
 export interface InitializePaymentResult {
   checkoutUrl: string;
-  providerReference: string;
+  /** PocketFi's own payment_id (e.g. "PFI|4346813e0ed2") -- store this as
+   * topup_requests.provider_reference. The docs' webhook payload example
+   * only shows a `transaction.reference` field, not payment_id, so the
+   * webhook handler treats a match on EITHER as confirmation -- see that
+   * route's comments. */
+  paymentId: string;
 }
 
 /**
- * Creates a hosted checkout link for a one-off payment. amountNaira is in
- * whole Naira (not kobo) -- adjust here if PocketFi actually expects kobo.
+ * POST /api/v1/checkout/request -- creates a hosted checkout session.
+ * PocketFi returns a payment_link to redirect the customer to; once they
+ * pay, PocketFi POSTs redirect_link with the result AND (separately) fires
+ * a webhook. amountNaira is passed as a string per the docs' own example
+ * payload ("amount": "100").
  */
 export async function initializePayment(params: {
   amountNaira: number;
   email: string;
-  reference: string; // our own idempotency key, echoed back on the webhook
-  callbackUrl: string;
-  metadata?: Record<string, unknown>;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  redirectLink: string;
 }): Promise<InitializePaymentResult> {
   const businessId = requireEnv("POCKETFI_BUSINESS_ID");
 
-  const body = await pocketfiFetch<any>("/v1/payments/initialize", {
+  const body = await pocketfiFetch<any>("/api/v1/checkout/request", {
     method: "POST",
     body: JSON.stringify({
+      first_name: params.firstName,
+      last_name: params.lastName,
+      phone: params.phone,
       business_id: businessId,
-      amount: params.amountNaira,
-      currency: "NGN",
       email: params.email,
-      reference: params.reference,
-      callback_url: params.callbackUrl,
-      metadata: params.metadata,
+      redirect_link: params.redirectLink,
+      amount: String(params.amountNaira),
     }),
   });
 
-  const checkoutUrl = body?.data?.checkout_url ?? body?.data?.authorization_url;
-  const providerReference = body?.data?.reference ?? params.reference;
-  if (!checkoutUrl) throw new Error("PocketFi did not return a checkout URL");
+  const checkoutUrl = body?.payment_link;
+  const paymentId = body?.payment_id;
+  if (!checkoutUrl || !paymentId) throw new Error("PocketFi did not return a payment_link/payment_id");
 
-  return { checkoutUrl, providerReference };
+  return { checkoutUrl, paymentId };
 }
 
 export interface VirtualAccountResult {
+  /** No separate provider account id is returned by this endpoint per the
+   * docs' response shape (just bankName/accountNumber/accountName) -- the
+   * account number itself doubles as our provider-side identifier. */
   providerAccountId: string;
   accountNumber: string;
   bankName: string;
@@ -104,59 +142,62 @@ export interface VirtualAccountResult {
 }
 
 /**
- * Creates (or, per PocketFi's docs, may return the existing one for) a
- * dedicated virtual account for a customer. Per the docs, virtual accounts
- * on some banks (e.g. PalmPay) require NIN/BVN-level KYC on the business
- * account -- if this call fails with a KYC-related error, that's a
- * PocketFi dashboard verification issue, not a bug here.
+ * POST /api/v1/virtual-accounts/create -- creates a dedicated (static)
+ * virtual account for a customer. Per the docs, `nin`/`bvn` are REQUIRED
+ * when bank is "palmpay" and optional otherwise; this only sends them when
+ * present, so non-PalmPay providers work without KYC data collected.
  *
- * bankProvider selects which partner bank issues the account (PocketFi
- * supports several -- Paga, PalmPay, Wema, etc.). It's admin-configurable
- * (app_settings.pocketfi_bank_provider, defaults to "paga") rather than
- * hardcoded, so the admin can swap it from Admin -> Settings if one
- * partner has an outage. IMPORTANT -- the field name below (`provider`)
- * and the exact provider codes PocketFi accepts ("paga", "palmpay", ...)
- * are unverified against PocketFi's real API reference; confirm against
- * their docs/dashboard and adjust here if a call 4xxs on this field.
+ * `bankProvider` must be one of the docs' literal codes: "saveheaven",
+ * "paga", "kuda", "9psb", "palmpay" -- NOT the previous guessed set. If
+ * Admin -> Settings has a different value saved (e.g. from before this
+ * fix), update it there.
  */
 export async function createVirtualAccount(params: {
   email: string;
-  fullName: string;
-  userId: string; // used as our own external reference
+  firstName: string;
+  lastName: string;
+  phone: string;
   bankProvider: string;
+  nin?: string;
+  bvn?: string;
 }): Promise<VirtualAccountResult> {
   const businessId = requireEnv("POCKETFI_BUSINESS_ID");
 
-  const body = await pocketfiFetch<any>("/v1/virtual-accounts", {
+  const body = await pocketfiFetch<any>("/api/v1/virtual-accounts/create", {
     method: "POST",
     body: JSON.stringify({
-      business_id: businessId,
+      first_name: params.firstName,
+      last_name: params.lastName,
+      phone: params.phone,
       email: params.email,
-      full_name: params.fullName,
-      external_reference: params.userId,
-      provider: params.bankProvider,
+      // NOTE: the docs use camelCase "businessId" here, unlike the
+      // snake_case "business_id" the checkout endpoint uses -- confirmed
+      // as written twice, differently, in the docs, not a typo on our end.
+      businessId,
+      bank: params.bankProvider,
+      ...(params.nin ? { nin: params.nin } : {}),
+      ...(params.bvn ? { bvn: params.bvn } : {}),
     }),
   });
 
-  const data = body?.data;
-  if (!data?.account_number) throw new Error("PocketFi did not return a virtual account");
+  const account = body?.banks?.[0];
+  if (!account?.accountNumber) throw new Error("PocketFi did not return a virtual account");
 
   return {
-    providerAccountId: String(data.id ?? data.account_id ?? data.account_number),
-    accountNumber: String(data.account_number),
-    bankName: String(data.bank_name ?? "PocketFi"),
-    accountName: data.account_name ?? null,
+    providerAccountId: String(account.accountNumber),
+    accountNumber: String(account.accountNumber),
+    bankName: String(account.bankName ?? "PocketFi"),
+    accountName: account.accountName ?? null,
   };
 }
 
 /**
- * Verifies the `x-pocketfi-signature` header PocketFi sends on webhook
- * requests: HMAC-SHA512 of the raw request body, keyed with the Secret API
- * Key (the hex string -- this is its only valid use; it is NOT a bearer
- * token for outbound calls, see the module header above), hex-encoded.
- * MUST be checked against the raw request text -- do not re-serialize a
- * parsed JSON object, since key ordering/whitespace differences would
- * break the comparison.
+ * Verifies a webhook's signature: HMAC-SHA512 of the raw request body,
+ * keyed with the Secret API Key (the hex string -- this is its only valid
+ * use; it is NOT a bearer token for outbound calls, see the module header
+ * above), hex-encoded. MUST be checked against the raw request text -- do
+ * not re-serialize a parsed JSON object, since key ordering/whitespace
+ * differences would break the comparison.
  */
 export function verifyWebhookSignature(rawBody: string, signatureHeader: string | null): boolean {
   if (!signatureHeader) return false;

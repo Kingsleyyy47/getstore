@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createVirtualAccount } from "@/lib/pocketfi";
+import { createVirtualAccount, splitName } from "@/lib/pocketfi";
 
 /**
  * Shared logic behind the three /api/pocketfi/virtual-account* routes.
@@ -15,6 +15,14 @@ import { createVirtualAccount } from "@/lib/pocketfi";
  * a transfer to an old, no-longer-primary account number still lands and
  * gets credited by /api/webhooks/pocketfi -- nothing that used to work
  * stops working, we just stop advertising the old number.
+ *
+ * PocketFi requires a phone number to create an account (see
+ * src/lib/pocketfi.ts), and profiles didn't collect one until
+ * supabase/012_profile_phone.sql -- so provisioning a FIRST account needs a
+ * phone either already saved on the profile, or supplied on this call (in
+ * which case it's saved to the profile for next time). If neither is
+ * available, this returns `phoneRequired: true` instead of throwing, so
+ * the route can ask the frontend to collect one.
  */
 
 export interface VirtualAccountRow {
@@ -31,7 +39,7 @@ export interface VirtualAccountRow {
 }
 
 async function fetchProfile(admin: ReturnType<typeof createAdminClient>, userId: string) {
-  const { data } = await admin.from("profiles").select("full_name, email").eq("id", userId).single();
+  const { data } = await admin.from("profiles").select("full_name, email, phone").eq("id", userId).single();
   return data;
 }
 
@@ -39,14 +47,17 @@ async function provisionPrimaryAccount(
   admin: ReturnType<typeof createAdminClient>,
   userId: string,
   fallbackEmail: string,
-  bankProvider: string
+  bankProvider: string,
+  phone: string
 ): Promise<VirtualAccountRow> {
   const profile = await fetchProfile(admin, userId);
+  const { firstName, lastName } = splitName(profile?.full_name, fallbackEmail.split("@")[0]);
 
   const created = await createVirtualAccount({
     email: profile?.email ?? fallbackEmail,
-    fullName: profile?.full_name ?? fallbackEmail,
-    userId,
+    firstName,
+    lastName,
+    phone,
     bankProvider,
   });
 
@@ -74,12 +85,17 @@ async function provisionPrimaryAccount(
  * from this account's provider and hasn't already been dismissed for that
  * exact provider -- the frontend uses that to show the "keep or switch?"
  * prompt.
+ *
+ * `suppliedPhone`: only needed (and only used) the very first time a
+ * customer with no saved phone number provisions their first account --
+ * gets persisted to profiles.phone so future calls don't need it again.
  */
 export async function getOrCreatePrimaryAccount(
   userId: string,
   fallbackEmail: string,
-  currentDefaultProvider: string
-): Promise<{ account: VirtualAccountRow; promptNewProvider: string | null }> {
+  currentDefaultProvider: string,
+  suppliedPhone?: string
+): Promise<{ account: VirtualAccountRow; promptNewProvider: string | null } | { phoneRequired: true }> {
   const admin = createAdminClient();
 
   const { data: primary } = await admin
@@ -90,7 +106,15 @@ export async function getOrCreatePrimaryAccount(
     .maybeSingle();
 
   if (!primary) {
-    const created = await provisionPrimaryAccount(admin, userId, fallbackEmail, currentDefaultProvider);
+    const profile = await fetchProfile(admin, userId);
+    const phone = profile?.phone || suppliedPhone;
+    if (!phone) return { phoneRequired: true };
+
+    if (!profile?.phone && suppliedPhone) {
+      await admin.from("profiles").update({ phone: suppliedPhone }).eq("id", userId);
+    }
+
+    const created = await provisionPrimaryAccount(admin, userId, fallbackEmail, currentDefaultProvider, phone);
     return { account: created, promptNewProvider: null };
   }
 
@@ -107,7 +131,9 @@ export async function getOrCreatePrimaryAccount(
  * Customer chose "switch" in the provider-change prompt: demotes the
  * current primary row (kept, untouched, still credits fine if money ever
  * lands on it) and provisions a brand new primary account under the
- * admin's current default provider.
+ * admin's current default provider. The customer already has a phone
+ * saved on their profile by this point (they had to have one to get their
+ * first account), so this doesn't need one supplied.
  */
 export async function switchPrimaryAccount(
   userId: string,
@@ -131,7 +157,11 @@ export async function switchPrimaryAccount(
     await admin.from("pocketfi_virtual_accounts").update({ is_primary: false }).eq("id", current.id);
   }
 
-  return provisionPrimaryAccount(admin, userId, fallbackEmail, currentDefaultProvider);
+  const profile = await fetchProfile(admin, userId);
+  const phone = profile?.phone;
+  if (!phone) throw new Error("No phone number on file -- can't provision a new account");
+
+  return provisionPrimaryAccount(admin, userId, fallbackEmail, currentDefaultProvider, phone);
 }
 
 /**
