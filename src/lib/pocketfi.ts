@@ -44,6 +44,14 @@ function requireEnv(name: string): string {
   return value;
 }
 
+/** PocketFi's API rejects both /checkout/request and /virtual-accounts/create
+ * with a 422 "The phone field is required" when no phone is sent -- confirmed
+ * live against this business account, contrary to the docs' framing that
+ * made it sound skippable. Nothing in this app currently collects a
+ * customer's phone number, so this dummy placeholder is sent whenever a
+ * real one isn't available, matching the fallback pattern used elsewhere. */
+const DUMMY_PHONE = "00000000000";
+
 async function pocketfiFetch<T = any>(path: string, init: RequestInit = {}): Promise<T> {
   const publicKey = requireEnv("POCKETFI_PUBLIC_KEY");
 
@@ -106,8 +114,8 @@ export async function initializePayment(params: {
   email: string;
   firstName: string;
   lastName: string;
-  /** Docs list this as required, but confirmed unneeded in practice on
-   * other live PocketFi integrations -- only sent when available. */
+  /** PocketFi requires this field; falls back to DUMMY_PHONE when not
+   * available (see that constant's comment). */
   phone?: string;
   redirectLink: string;
 }): Promise<InitializePaymentResult> {
@@ -118,7 +126,7 @@ export async function initializePayment(params: {
     body: JSON.stringify({
       first_name: params.firstName,
       last_name: params.lastName,
-      ...(params.phone ? { phone: params.phone } : {}),
+      phone: params.phone || DUMMY_PHONE,
       business_id: businessId,
       email: params.email,
       redirect_link: params.redirectLink,
@@ -145,10 +153,11 @@ export interface VirtualAccountResult {
 
 /**
  * POST /api/v1/virtual-accounts/create -- creates a dedicated (static)
- * virtual account for a customer. Docs list `phone` as required and
- * `nin`/`bvn` as required specifically for the "palmpay" bank -- confirmed
- * unneeded in practice across other live PocketFi integrations, so none of
- * the three are sent unless supplied.
+ * virtual account for a customer. `phone` is required (falls back to
+ * DUMMY_PHONE when not available -- see that constant's comment; confirmed
+ * live that PocketFi 422s without it, despite this looking skippable from
+ * the docs alone). `nin`/`bvn` are required specifically for the "palmpay"
+ * bank per the docs and only sent when supplied.
  *
  * `bankProvider` must be one of the docs' literal codes: "saveheaven",
  * "paga", "kuda", "9psb", "palmpay" -- NOT the previous guessed set. If
@@ -171,7 +180,7 @@ export async function createVirtualAccount(params: {
     body: JSON.stringify({
       first_name: params.firstName,
       last_name: params.lastName,
-      ...(params.phone ? { phone: params.phone } : {}),
+      phone: params.phone || DUMMY_PHONE,
       email: params.email,
       // NOTE: the docs use camelCase "businessId" here, unlike the
       // snake_case "business_id" the checkout endpoint uses -- confirmed
