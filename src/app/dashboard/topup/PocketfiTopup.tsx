@@ -3,68 +3,19 @@
 import { useState } from "react";
 
 /**
- * Client-side controls for the two automated PocketFi funding methods,
- * shown alongside the existing manual top-up form. Only rendered when
- * Admin -> Settings has PocketFi turned on (see page.tsx).
+ * Client-side control for the automated PocketFi virtual-account funding
+ * method, shown alongside the existing manual top-up form. Only rendered
+ * when Admin -> Settings has PocketFi turned on (see page.tsx).
+ *
+ * The instant card/bank checkout option (PocketFi hosted checkout) has
+ * been removed from display -- only "generate account number" (the
+ * dedicated virtual account) stays. The admin toggle in Settings still
+ * controls whether this section shows at all.
  */
 export default function PocketfiTopup() {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <CheckoutCard />
+    <div className="grid grid-cols-1 gap-4">
       <VirtualAccountCard />
-    </div>
-  );
-}
-
-function CheckoutCard() {
-  const [amount, setAmount] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function startCheckout() {
-    setError(null);
-    const amountNumber = parseFloat(amount);
-    if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
-      setError("Enter a valid amount");
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch("/api/pocketfi/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: amountNumber }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error ?? "Could not start checkout");
-      window.location.href = body.checkoutUrl;
-    } catch (err: any) {
-      setError(err?.message ?? "Something went wrong");
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="card space-y-3 p-6">
-      <div>
-        <div className="font-semibold">Pay with card or bank</div>
-        <div className="text-sm text-[var(--text-muted)]">
-          Instant -- redirects you to a secure PocketFi checkout page.
-        </div>
-      </div>
-      <input
-        className="input"
-        type="number"
-        step="0.01"
-        min="1"
-        placeholder="Amount (₦)"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-      />
-      {error && <div className="text-sm text-red-400">{error}</div>}
-      <button className="btn-primary w-full" onClick={startCheckout} disabled={loading}>
-        {loading ? "Redirecting…" : "Pay now"}
-      </button>
     </div>
   );
 }
