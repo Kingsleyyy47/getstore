@@ -2,7 +2,6 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getSettings } from "@/lib/settings";
 import { formatNaira, type WalletTransaction } from "@/lib/types";
-import { requestTopup } from "./actions";
 import PocketfiTopup from "./PocketfiTopup";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
@@ -38,8 +37,8 @@ export default async function TopupPage({
         title="Add funds"
         subtitle={
           settings.pocketfi_enabled
-            ? "Get a dedicated transfer account below for instant funding -- or submit a manual request for an admin to review."
-            : "Submit a top-up request below. An admin will review and credit your wallet manually."
+            ? "Get a dedicated transfer account below for instant funding."
+            : "Top-ups are currently unavailable. Please contact support."
         }
       />
 
@@ -55,38 +54,6 @@ export default async function TopupPage({
       )}
 
       {settings.pocketfi_enabled && <PocketfiTopup />}
-
-      <form action={requestTopup} className="card space-y-4 p-6">
-        <div>
-          <label className="label" htmlFor="amount">
-            Amount (₦)
-          </label>
-          <input
-            className="input"
-            id="amount"
-            name="amount"
-            type="number"
-            step="0.01"
-            min="1"
-            required
-          />
-        </div>
-        <div>
-          <label className="label" htmlFor="reference">
-            Payment reference / note (optional)
-          </label>
-          <input
-            className="input"
-            id="reference"
-            name="reference"
-            type="text"
-            placeholder="e.g. bank transfer ref, screenshot filename, etc."
-          />
-        </div>
-        <button className="btn-primary w-full" type="submit">
-          Submit top-up request
-        </button>
-      </form>
 
       <section>
         <h2 className="mb-3 text-lg font-bold">Transaction history</h2>
