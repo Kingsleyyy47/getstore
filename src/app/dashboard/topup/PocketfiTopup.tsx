@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { IconBank, IconCard, IconUser, IconCopy, IconCheck, IconRefresh } from "@/components/icons";
 
 /**
  * Client-side control for the automated PocketFi virtual-account funding
@@ -79,26 +80,39 @@ function VirtualAccountCard() {
   }
 
   return (
-    <div className="card space-y-3 p-6">
-      <div>
-        <div className="font-semibold">Bank transfer, anytime</div>
-        <div className="text-sm text-[var(--text-muted)]">
-          Get a dedicated account number -- any transfer to it credits your wallet automatically.
+    <div className="card space-y-4 p-6">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
+          <IconBank size={20} />
+        </div>
+        <div>
+          <div className="font-semibold">Your funding account</div>
+          <div className="text-sm text-[var(--text-muted)]">
+            Transfer any amount to this account any time — your wallet is credited automatically once the
+            transfer arrives.
+          </div>
         </div>
       </div>
+
       {!fetched && (
-        <button className="btn-ghost w-full" onClick={loadAccount} disabled={loading}>
+        <button className="btn-primary w-full inline-flex items-center justify-center gap-2" onClick={loadAccount} disabled={loading}>
+          <IconBank size={16} />
           {loading ? "Loading…" : "Get my account number"}
         </button>
       )}
       {error && <div className="text-sm text-red-400">{error}</div>}
       {account && (
-        <div className="rounded-lg border border-[var(--border)] p-3 text-sm">
-          <div className="font-mono text-base font-bold">{account.account_number}</div>
-          <div className="text-[var(--text-muted)]">
-            {account.bank_name}
-            {account.account_name ? ` · ${account.account_name}` : ""}
-          </div>
+        <div className="overflow-hidden rounded-lg border border-[var(--border)] divide-y divide-[var(--border)]">
+          <FieldRow icon={<IconCard size={16} />} label="Bank" value={account.bank_name} />
+          <FieldRow
+            icon={<IconBank size={16} />}
+            label="Account Number"
+            value={account.account_number}
+            copyable
+          />
+          {account.account_name && (
+            <FieldRow icon={<IconUser size={16} />} label="Account Name" value={account.account_name} />
+          )}
         </div>
       )}
       {promptNewProvider && (
@@ -117,14 +131,63 @@ function VirtualAccountCard() {
               {switching === "keep" ? "Saving…" : "Keep my account"}
             </button>
             <button
-              className="btn-primary flex-1"
+              className="btn-primary flex-1 inline-flex items-center justify-center gap-2"
               onClick={chooseSwitch}
               disabled={switching !== null}
             >
+              <IconRefresh size={14} />
               {switching === "switch" ? "Switching…" : "Get a new one"}
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function FieldRow({
+  icon,
+  label,
+  value,
+  copyable,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  copyable?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard API unavailable -- ignore, the value is still visible to select/copy manually
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/5 text-[var(--text-muted)] dark:bg-white/5">
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</div>
+          <div className="mt-0.5 break-all font-mono font-semibold">{value}</div>
+        </div>
+      </div>
+      {copyable && (
+        <button
+          type="button"
+          onClick={copy}
+          aria-label={`Copy ${label}`}
+          className="shrink-0 rounded-lg p-2 text-[var(--text-muted)] hover:bg-black/5 hover:text-[var(--text)] dark:hover:bg-white/5"
+        >
+          {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+        </button>
       )}
     </div>
   );
