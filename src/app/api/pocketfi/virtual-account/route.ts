@@ -27,7 +27,7 @@ import { getOrCreatePrimaryAccount } from "@/lib/pocketfi-virtual-account";
  * working if money ever lands on it anyway.
  */
 export async function GET() {
-  return handle(null);
+  return handle(undefined);
 }
 
 /** Same as GET, but for supplying a phone number on first use -- see the
