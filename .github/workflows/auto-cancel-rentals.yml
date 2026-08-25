@@ -1,0 +1,30 @@
+name: Auto-cancel stale rentals
+
+# Vercel's Hobby plan only allows cron jobs to run once a day (see
+# vercel.json, which keeps a once-daily 3am UTC sweep as a backup net), but
+# rentals need checking every few minutes to catch the 7-minute no-code
+# window (see src/lib/rentals.ts / src/app/api/cron/auto-cancel-rentals).
+# GitHub Actions has no such restriction and is free, so THIS workflow is
+# the real, frequent trigger -- it just calls that same endpoint.
+#
+# Setup (one-time):
+#   1. Repo -> Settings -> Secrets and variables -> Actions -> New repository
+#      secret, name it CRON_SECRET, and paste the SAME value you set as
+#      CRON_SECRET in your Vercel project's environment variables.
+#   2. That's it -- this runs automatically every 5 minutes once merged to
+#      the default branch. GitHub may delay a run by a few minutes under
+#      load; that's fine given the 7-minute threshold.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
+
+jobs:
+  auto-cancel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call auto-cancel-rentals endpoint
+        run: |
+          curl --fail-with-body -sS -X GET "https://getstore.org/api/cron/auto-cancel-rentals" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

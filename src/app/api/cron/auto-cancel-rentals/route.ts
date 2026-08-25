@@ -20,14 +20,18 @@ export const dynamic = "force-dynamic";
  * this marks the rental "received" instead of cancelling it, matching the
  * behavior of the customer-facing /cancel routes.
  *
- * Trigger this on a schedule:
- *   - On Vercel: see vercel.json's `crons` entry. Vercel automatically sends
- *     `Authorization: Bearer $CRON_SECRET` on its own scheduled hits to
- *     this route, which is exactly what's checked below.
- *   - Elsewhere: point any external scheduler (cron-job.org, a GitHub
- *     Actions scheduled workflow, etc.) at
- *     https://getstore.org/api/cron/auto-cancel-rentals every few minutes,
- *     sending that same `Authorization: Bearer <CRON_SECRET>` header.
+ * Trigger this on a schedule -- checked every 5 minutes so a rental never
+ * sits stale much past the 7-minute mark:
+ *   - PRIMARY: .github/workflows/auto-cancel-rentals.yml (GitHub Actions),
+ *     which hits this route every 5 minutes. Vercel's own Cron Jobs are
+ *     limited to once/day on the Hobby plan (see vercel.json's `crons`
+ *     entry, kept as a once-daily 3am UTC backup sweep, not the real
+ *     schedule) -- upgrading to Vercel Pro would allow per-minute crons
+ *     there instead, but GitHub Actions works today at no extra cost.
+ *   - Whatever calls this must send the `Authorization: Bearer $CRON_SECRET`
+ *     header, which is exactly what's checked below (Vercel's own Cron Jobs
+ *     send this automatically; the GitHub Actions workflow is configured to
+ *     send it too).
  * See .env.example for CRON_SECRET.
  */
 export async function GET(req: Request) {
