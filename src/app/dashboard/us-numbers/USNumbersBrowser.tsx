@@ -37,7 +37,28 @@ export default function USNumbersBrowser() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [rental, setRental] = useState<Rental | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Drives the "you can cancel in Xs" countdown below -- ticks once a
+  // second only while there's a rental waiting on a code.
+  useEffect(() => {
+    if (rental?.status === "waiting") {
+      tickRef.current = setInterval(() => setNow(Date.now()), 1000);
+      return () => {
+        if (tickRef.current) clearInterval(tickRef.current);
+      };
+    }
+  }, [rental?.status]);
+
+  // Customers can cancel & refund 3 minutes after buying if no code has
+  // arrived; if nobody cancels, it's auto-cancelled and refunded after 7
+  // minutes (see src/lib/rentals.ts -- the server enforces this too, this
+  // is just so the button/countdown match what the server will accept).
+  const cancellableInMs = rental
+    ? Math.max(0, new Date(rental.created_at).getTime() + 3 * 60 * 1000 - now)
+    : 0;
 
   useEffect(() => {
     (async () => {
@@ -62,6 +83,7 @@ export default function USNumbersBrowser() {
     })();
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (tickRef.current) clearInterval(tickRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -178,7 +200,8 @@ export default function USNumbersBrowser() {
         <div className="rounded-lg border border-[var(--border)] p-4">
           {rental.status === "waiting" && (
             <p className="text-sm text-[var(--text-muted)]">
-              Waiting for SMS... (checking every 5s)
+              Waiting for SMS... (checking every 5s). We'll auto-cancel and refund this if no code
+              arrives within 7 minutes.
             </p>
           )}
           {rental.status === "received" && (
@@ -194,8 +217,10 @@ export default function USNumbersBrowser() {
 
         <div className="flex gap-3">
           {rental.status === "waiting" && (
-            <button className="btn-ghost" onClick={cancel}>
-              Cancel &amp; refund
+            <button className="btn-ghost" onClick={cancel} disabled={cancellableInMs > 0}>
+              {cancellableInMs > 0
+                ? `Cancel in ${Math.ceil(cancellableInMs / 1000)}s`
+                : "Cancel & refund"}
             </button>
           )}
           <button className="btn-ghost" onClick={reset}>

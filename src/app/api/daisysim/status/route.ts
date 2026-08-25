@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import * as daisysim from "@/lib/daisysim";
+import { refundRental } from "@/lib/rentals";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -58,12 +59,20 @@ export async function GET(req: Request) {
   }
 
   if (result.status === "Cancelled") {
+    // DaisySim itself cancelled this rental (not the customer) -- reflect
+    // that immediately and refund right away, same as a customer-initiated
+    // cancel. The "status" = "waiting" guard makes this atomic against a
+    // concurrent customer /cancel call, so it's never refunded twice.
     const { data: updated } = await admin
       .from("rentals")
       .update({ status: "cancelled", updated_at: new Date().toISOString() })
       .eq("id", rentalId)
+      .eq("status", "waiting")
       .select()
       .single();
+    if (updated) {
+      await refundRental(admin, updated, `Refund -- DaisySim cancelled ${rental.service} rental +${rental.phone}`);
+    }
     return NextResponse.json({ rental: updated ?? rental });
   }
 

@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 /**
  * Receives DaisySim's "code.received" webhook (configured on DaisySim's own
  * dashboard under Settings -> Webhook URL, pointed at
- * https://<your-domain>/api/webhooks/daisysim). Fires once per activation,
+ * https://getstore.org/api/webhooks/daisysim). Fires once per activation,
  * as a backup/faster alternative to polling /api/daisysim/status or
  * /api/daisysim2/status.
  *

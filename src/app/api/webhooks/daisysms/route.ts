@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 /**
  * Receives DaisySMS's incoming-SMS webhook (configured on DaisySMS's own
  * dashboard at https://daisysms.io/dashboard/profile under "Webhook URL",
- * pointed at https://<your-domain>/api/webhooks/daisysms). Per DaisySMS's
+ * pointed at https://getstore.org/api/webhooks/daisysms). Per DaisySMS's
  * docs, this fires as a POST whenever an SMS is forwarded to a rental, with
  * this exact body shape:
  *   {

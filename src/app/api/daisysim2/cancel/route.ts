@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import * as daisysim2 from "@/lib/daisysim2";
+import { msUntilCancellable, refundRental } from "@/lib/rentals";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -30,11 +31,24 @@ export async function POST(req: Request) {
     );
   }
 
+  const waitMs = msUntilCancellable(rental.created_at);
+  if (waitMs > 0) {
+    return NextResponse.json(
+      {
+        error: `You can cancel this in ${Math.ceil(waitMs / 1000)}s (after 3 minutes with no code).`,
+      },
+      { status: 422 }
+    );
+  }
+
   const admin = createAdminClient();
 
   try {
     await daisysim2.cancel(rental.external_id);
   } catch (e) {
+    // Our own 3-minute gate above always waits longer than DaisySim's own
+    // TOO_EARLY window, so this branch should be unreachable in normal
+    // operation -- kept only as a defensive fallback.
     if (e instanceof daisysim2.DaisySim2Error && e.code === "TOO_EARLY") {
       return NextResponse.json(
         { error: e.message || "You can't cancel this number just yet -- please wait a bit and try again." },
@@ -51,6 +65,7 @@ export async function POST(req: Request) {
             .from("rentals")
             .update({ status: "received", code: status.code, updated_at: new Date().toISOString() })
             .eq("id", rentalId)
+            .eq("status", "waiting")
             .select()
             .single();
           return NextResponse.json({
@@ -70,36 +85,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  const { data: wallet } = await admin
-    .from("wallets")
-    .select("balance_cents")
-    .eq("user_id", rental.user_id)
-    .single();
-
-  const balanceCents = wallet?.balance_cents ?? 0;
-  const refundedCents = rental.price_cents;
-  const newBalanceCents = balanceCents + refundedCents;
-
-  await admin
-    .from("wallets")
-    .update({ balance_cents: newBalanceCents, updated_at: new Date().toISOString() })
-    .eq("user_id", rental.user_id);
-
-  await admin.from("wallet_transactions").insert({
-    user_id: rental.user_id,
-    type: "refund",
-    amount_cents: refundedCents,
-    balance_after_cents: newBalanceCents,
-    description: `Refund for cancelled ${rental.service} rental +${rental.phone}`,
-    related_rental_id: rental.id,
-  });
-
+  // DaisySim (US Only) has now CONFIRMED the cancellation. Flip status
+  // atomically (only if still "waiting", guarding against a race with a
+  // status poll that landed at the same moment) before refunding, so we
+  // never double-refund the same rental.
   const { data: updated } = await admin
     .from("rentals")
     .update({ status: "cancelled", updated_at: new Date().toISOString() })
     .eq("id", rentalId)
+    .eq("status", "waiting")
     .select()
     .single();
 
-  return NextResponse.json({ rental: updated ?? rental });
+  const settled = updated ?? rental;
+  if (updated) {
+    await refundRental(admin, settled, `Refund for cancelled ${rental.service} rental +${rental.phone}`);
+  }
+
+  return NextResponse.json({ rental: settled });
 }

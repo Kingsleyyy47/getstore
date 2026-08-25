@@ -4,7 +4,7 @@ import { verifyWebhookSignature } from "@/lib/pocketfi";
 
 /**
  * Receives PocketFi's payment webhooks (configured on PocketFi's dashboard,
- * pointed at https://<your-domain>/api/webhooks/pocketfi). Unlike the
+ * pointed at https://getstore.org/api/webhooks/pocketfi). Unlike the
  * DaisySMS/DaisySim webhooks, PocketFi's docs describe an HMAC-SHA512
  * signature on the `x-pocketfi-signature` header, so this endpoint DOES
  * cryptographically verify the sender before doing anything -- requests
