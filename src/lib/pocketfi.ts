@@ -106,7 +106,9 @@ export async function initializePayment(params: {
   email: string;
   firstName: string;
   lastName: string;
-  phone: string;
+  /** Docs list this as required, but confirmed unneeded in practice on
+   * other live PocketFi integrations -- only sent when available. */
+  phone?: string;
   redirectLink: string;
 }): Promise<InitializePaymentResult> {
   const businessId = requireEnv("POCKETFI_BUSINESS_ID");
@@ -116,7 +118,7 @@ export async function initializePayment(params: {
     body: JSON.stringify({
       first_name: params.firstName,
       last_name: params.lastName,
-      phone: params.phone,
+      ...(params.phone ? { phone: params.phone } : {}),
       business_id: businessId,
       email: params.email,
       redirect_link: params.redirectLink,
@@ -143,9 +145,10 @@ export interface VirtualAccountResult {
 
 /**
  * POST /api/v1/virtual-accounts/create -- creates a dedicated (static)
- * virtual account for a customer. Per the docs, `nin`/`bvn` are REQUIRED
- * when bank is "palmpay" and optional otherwise; this only sends them when
- * present, so non-PalmPay providers work without KYC data collected.
+ * virtual account for a customer. Docs list `phone` as required and
+ * `nin`/`bvn` as required specifically for the "palmpay" bank -- confirmed
+ * unneeded in practice across other live PocketFi integrations, so none of
+ * the three are sent unless supplied.
  *
  * `bankProvider` must be one of the docs' literal codes: "saveheaven",
  * "paga", "kuda", "9psb", "palmpay" -- NOT the previous guessed set. If
@@ -156,7 +159,7 @@ export async function createVirtualAccount(params: {
   email: string;
   firstName: string;
   lastName: string;
-  phone: string;
+  phone?: string;
   bankProvider: string;
   nin?: string;
   bvn?: string;
@@ -168,7 +171,7 @@ export async function createVirtualAccount(params: {
     body: JSON.stringify({
       first_name: params.firstName,
       last_name: params.lastName,
-      phone: params.phone,
+      ...(params.phone ? { phone: params.phone } : {}),
       email: params.email,
       // NOTE: the docs use camelCase "businessId" here, unlike the
       // snake_case "business_id" the checkout endpoint uses -- confirmed

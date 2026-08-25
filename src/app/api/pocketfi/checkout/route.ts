@@ -37,17 +37,6 @@ export async function POST(req: Request) {
     .eq("id", user.id)
     .single();
 
-  // PocketFi requires a phone number; unlike the virtual-account flow this
-  // route has no inline "ask for it" UI (it's currently unused -- see
-  // comment above), so just point the customer at the flow that collects
-  // one rather than guessing.
-  if (!profile?.phone) {
-    return NextResponse.json(
-      { error: "Add a phone number first via the Bank transfer option, then try again." },
-      { status: 400 }
-    );
-  }
-
   const body = await req.json().catch(() => null);
   const amountNaira = Number(body?.amount);
   if (!Number.isFinite(amountNaira) || amountNaira <= 0) {
@@ -73,13 +62,13 @@ export async function POST(req: Request) {
 
   try {
     const origin = new URL(req.url).origin;
-    const { firstName, lastName } = splitName(profile.full_name, user.email!.split("@")[0]);
+    const { firstName, lastName } = splitName(profile?.full_name, user.email!.split("@")[0]);
     const { checkoutUrl, paymentId } = await initializePayment({
       amountNaira,
       email: user.email!,
       firstName,
       lastName,
-      phone: profile.phone,
+      phone: profile?.phone ?? undefined,
       redirectLink: `${origin}/dashboard/topup?success=1`,
     });
 
