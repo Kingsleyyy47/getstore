@@ -2,12 +2,12 @@ import AuthShowcase from "@/components/AuthShowcase";
 import SocialLinks, { hasAnySocialLink } from "@/components/SocialLinks";
 import { IconLock } from "@/components/icons";
 import { getSupportLinks } from "@/lib/settings";
-import { login } from "./actions";
+import { requestPasswordReset } from "./actions";
 
-export default async function LoginPage({
+export default async function ForgotPasswordPage({
   searchParams,
 }: {
-  searchParams: { error?: string; next?: string };
+  searchParams: { error?: string; sent?: string };
 }) {
   const links = await getSupportLinks();
 
@@ -15,8 +15,6 @@ export default async function LoginPage({
     <div className="flex min-h-[calc(100vh-73px)] flex-col lg:flex-row">
       <AuthShowcase links={links} />
 
-      {/* Mobile/tablet only: AuthShowcase is desktop-only, so this compact
-          green strip keeps the same brand identity visible below lg. */}
       <div className="clip-decor flex items-center gap-3 bg-gradient-to-br from-emerald-950 via-green-900 to-emerald-800 px-6 py-6 text-white lg:hidden">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.08]"
@@ -30,17 +28,16 @@ export default async function LoginPage({
           <IconLock size={20} />
         </span>
         <div className="relative min-w-0">
-          <div className="font-semibold">Welcome back</div>
-          <div className="text-sm text-emerald-100/70">Sign in to your wallet</div>
+          <div className="font-semibold">Reset your password</div>
+          <div className="text-sm text-emerald-100/70">We'll email you a link</div>
         </div>
       </div>
 
       <div className="flex flex-1 items-center justify-center overflow-x-hidden px-4 py-12 sm:px-6 sm:py-16">
         <div className="w-full max-w-sm">
-          <h1 className="mb-2 hidden text-3xl font-semibold lg:block">Welcome back</h1>
+          <h1 className="mb-2 hidden text-3xl font-semibold lg:block">Reset your password</h1>
           <p className="mb-6 text-sm text-[var(--text-muted)]">
-            Sign in to check your wallet, pick up where you left off, and get back to
-            what you needed verified.
+            Enter the email on your account and we'll send you a link to set a new password.
           </p>
 
           {searchParams.error && (
@@ -49,37 +46,32 @@ export default async function LoginPage({
             </div>
           )}
 
-          <form action={login} className="card space-y-4 p-6">
-            <input type="hidden" name="next" value={searchParams.next ?? "/dashboard"} />
-            <div>
-              <label className="label" htmlFor="email">
-                Email
-              </label>
-              <input className="input" id="email" name="email" type="email" required autoFocus />
+          {searchParams.sent ? (
+            <div className="card space-y-2 p-6">
+              <div className="font-semibold">Check your email</div>
+              <p className="text-sm text-[var(--text-muted)]">
+                If an account exists for that email, a password reset link is on its way. It can take
+                a minute or two to arrive -- don't forget to check spam.
+              </p>
             </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="label" htmlFor="password">
-                  Password
+          ) : (
+            <form action={requestPasswordReset} className="card space-y-4 p-6">
+              <div>
+                <label className="label" htmlFor="email">
+                  Email
                 </label>
-                <a
-                  href="/forgot-password"
-                  className="text-xs font-medium text-brand hover:underline"
-                >
-                  Forgot password?
-                </a>
+                <input className="input" id="email" name="email" type="email" required autoFocus />
               </div>
-              <input className="input" id="password" name="password" type="password" required />
-            </div>
-            <button className="btn-primary w-full" type="submit">
-              Sign in
-            </button>
-          </form>
+              <button className="btn-primary w-full" type="submit">
+                Send reset link
+              </button>
+            </form>
+          )}
 
           <p className="mt-4 text-center text-sm text-[var(--text-muted)]">
-            Don&apos;t have an account?{" "}
-            <a className="text-brand hover:underline" href="/signup">
-              Sign up
+            Remembered it after all?{" "}
+            <a className="text-brand hover:underline" href="/login">
+              Sign in
             </a>
           </p>
           <p className="mt-2 text-center text-sm text-[var(--text-muted)]">
