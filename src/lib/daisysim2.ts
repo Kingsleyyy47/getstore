@@ -121,16 +121,42 @@ interface GetatextPriceEntry {
  * keep this function's signature identical to the old provider's -- there
  * is no per-country catalog here, it's one flat US catalog.
  *
- * Docs show a single example object rather than an array, which reads like
- * documentation shorthand for "one element of the list" rather than the
- * literal response shape (every other list-returning Getatext endpoint
- * returns an array) -- this defensively accepts either an array or a lone
- * object so a real single-object response still works.
+ * The docs' sample response shows one bare object with no wrapper, but
+ * every OTHER list-returning Getatext endpoint (auctions, long-rentals,
+ * service-long-rentals, ...) wraps its array in a named key alongside
+ * `status`/`errors` (e.g. `{ status, auctions: [...], errors }`) -- the
+ * sample here is far more likely to be documentation shorthand for "one
+ * element of the real list" than the literal top-level shape. So this
+ * checks, in order: a bare array, then the common wrapper key names seen
+ * elsewhere in Getatext's own docs, then finally falls back to treating the
+ * response as a single entry. If none of those produce anything
+ * resembling a price list, it throws instead of silently returning an
+ * empty catalog -- an empty catalog with no error reads as "no products
+ * configured" in the admin UI, which hides a real integration bug.
  */
 export async function getApps(_country: string): Promise<App[]> {
-  const data = await call<GetatextPriceEntry[] | GetatextPriceEntry>("/prices-info");
-  const entries = Array.isArray(data) ? data : [data];
-  return entries
+  const data = await call<any>("/prices-info");
+
+  const candidates: unknown = Array.isArray(data)
+    ? data
+    : (data?.services ?? data?.prices ?? data?.data ?? data?.items ?? data?.results);
+
+  const list: GetatextPriceEntry[] = Array.isArray(candidates)
+    ? candidates
+    : data && typeof data === "object" && "api_name" in data
+      ? [data]
+      : [];
+
+  if (list.length === 0) {
+    throw new DaisySim2Error(
+      "Getatext's /prices-info response didn't match any known shape -- check GETATEXT_API_KEY and the live response manually.",
+      undefined,
+      undefined,
+      data
+    );
+  }
+
+  return list
     .filter((e) => e && e.api_name && (e.stock === undefined || Number(e.stock) > 0))
     .map((e) => ({ code: e.api_name, name: e.service_name, price: Number(e.price) }));
 }
