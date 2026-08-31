@@ -1,37 +1,34 @@
 import "server-only";
 
 /**
- * Server-side wrapper for the "DaisySim API 2" server (server7,
- * https://daisysim.com/api/v1/server7). This is a SEPARATE, independent
- * provider from both DaisySMS (the "USA & Canada" flow) and the original
- * DaisySim virtual-numbers API (the "All Countries" flow) -- it is not a
- * replacement for either. It is USA-only, and is surfaced to customers as
- * "US Only". Bearer-token auth, JSON. SERVER-ONLY: reads the secret
- * DAISYSIM_API_KEY.
+ * Server-side wrapper for the "US Only" number-rental provider.
  *
- * This is the same DaisySim account/API key as src/lib/daisysim.ts -- one
- * company, two products under the same account -- so there is no separate
- * DAISYSIM2_API_KEY. Only the base URL differs (server7 vs. the original
- * /virtual endpoint).
+ * NOTE ON THE FILENAME/EXPORTS: this module used to wrap DaisySim's server7
+ * API. It has been swapped to wrap Getatext (https://getatext.com/api/v1)
+ * instead -- Getatext sells US numbers only, same as the old provider, so
+ * "US Only" as a customer-facing feature is unchanged. The file is still
+ * named daisysim2.ts and still exports `DaisySim2Error` / the same function
+ * signatures (getBalance, getCountries, getApps, purchase, checkStatus,
+ * cancel) ON PURPOSE -- every route under src/app/api/daisysim2/*, the cron
+ * auto-canceller, the admin pricing pages, and the `rentals.provider =
+ * 'daisysim2'` value in the database all reference this exact module/name.
+ * Renaming any of that would mean touching a dozen files and a DB check
+ * constraint for zero customer-facing benefit -- keeping the name is a
+ * deliberate choice, not an oversight.
  *
- * Field shapes below were copied verbatim from the server7 API docs
- * (not re-derived/guessed), including two things that differ from the
- * original DaisySim client's conventions:
- *   - GET /apps/{country} and POST /check-all return their payload as a
- *     bare array in `data` (NOT wrapped in a `{ apps: [...] }` /
- *     `{ results: [...] }` object like /countries and /history are)
- *   - /purchase takes an `app` code copied verbatim from /apps (never
- *     constructed/guessed) and never sends a price -- the server resolves
- *     the live price from the app code alone and returns what it actually
- *     charged as `amount_charged`
- *   - /cancel and /check use the same TOO_EARLY / CODE_RECEIVED error-code
- *     pattern as the original DaisySim API, so the existing cancel-route
- *     handling logic carries over directly
- *   - error responses are branched on by the `code` field, not by message
- *     text, per the docs' explicit guidance
+ * Field shapes below are taken directly from Getatext's API docs. Two
+ * things worth knowing:
+ *   - Getatext's JSON responses are FLAT (the payload fields sit at the top
+ *     level next to `errors`), unlike the old provider's `{ data: {...} }`
+ *     envelope -- `call()` below reflects that.
+ *   - Getatext is US-only account-wide (no country selector in their API
+ *     at all), so getCountries() below doesn't call Getatext -- there's
+ *     nothing to ask -- it just returns a single synthetic "USA" entry so
+ *     every existing caller (which expects a Country[] to pick from) keeps
+ *     working unchanged.
  */
 
-const BASE_URL = process.env.DAISYSIM2_BASE_URL ?? "https://daisysim.com/api/v1/server7";
+const BASE_URL = process.env.GETATEXT_BASE_URL ?? "https://getatext.com/api/v1";
 
 export class DaisySim2Error extends Error {
   constructor(message: string, public code?: string, public status?: number, public data?: unknown) {
@@ -41,28 +38,22 @@ export class DaisySim2Error extends Error {
 }
 
 function apiKey(): string {
-  // Same DaisySim account key as the original provider -- not a separate
-  // DAISYSIM2_API_KEY. Only the base URL is product-specific.
-  const key = process.env.DAISYSIM_API_KEY;
-  if (!key) throw new DaisySim2Error("DAISYSIM_API_KEY is not set on the server");
+  const key = process.env.GETATEXT_API_KEY;
+  if (!key) throw new DaisySim2Error("GETATEXT_API_KEY is not set on the server");
   return key;
 }
 
-async function call<T>(
-  path: string,
-  init?: { method?: string; body?: unknown; query?: Record<string, string | number | undefined> }
-): Promise<T> {
-  const url = new URL(`${BASE_URL}${path}`);
-  if (init?.query) {
-    for (const [k, v] of Object.entries(init.query)) {
-      if (v !== undefined) url.searchParams.set(k, String(v));
-    }
-  }
-
-  const res = await fetch(url.toString(), {
+/**
+ * Getatext auth is a plain `Auth: <key>` header (not `Authorization:
+ * Bearer`), and success/failure is signalled by HTTP status + an `errors`
+ * field that's `null` on success and a string on failure -- there's no
+ * `{ data: ... }` envelope, the payload fields are top-level.
+ */
+async function call<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
     method: init?.method ?? "GET",
     headers: {
-      Authorization: `Bearer ${apiKey()}`,
+      Auth: apiKey(),
       Accept: "application/json",
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
     },
@@ -72,12 +63,19 @@ async function call<T>(
 
   const json = await res.json().catch(() => null);
 
-  if (!json || json.success !== true) {
-    const message = json?.error ?? json?.message ?? `DaisySim (US) request failed (${res.status})`;
-    throw new DaisySim2Error(message, json?.code, res.status, json?.data);
+  // Getatext's own docs are inconsistent about how "no error" is spelled --
+  // most endpoints show a real JSON `null`, a few show the literal string
+  // "null" -- so both are treated as "no error" here.
+  const hasError = json?.errors != null && json.errors !== "null" && json.errors !== "";
+
+  if (!res.ok || !json || hasError) {
+    const message =
+      (typeof json?.errors === "string" && json.errors !== "null" ? json.errors : null) ??
+      `Getatext request failed (${res.status})`;
+    throw new DaisySim2Error(message, undefined, res.status, json);
   }
 
-  return json.data as T;
+  return json as T;
 }
 
 export interface Balance {
@@ -87,18 +85,21 @@ export interface Balance {
 }
 
 export async function getBalance(): Promise<Balance> {
-  return call<Balance>("/balance");
+  const data = await call<{ balance: string }>("/balance");
+  return { balance: Number(data.balance), currency: "USD", email: "" };
 }
 
-/** Currently USA-only per the docs -- id is a string, e.g. "USA". */
+/** Getatext has no country selector -- it's USA-only for the whole account,
+ * so this is a synthetic single-entry list, not a live API call. Kept as an
+ * async function returning the same Country[] shape so every existing
+ * caller (which awaits this and picks an id) needs no changes. */
 export interface Country {
   id: string;
   name: string;
 }
 
 export async function getCountries(): Promise<Country[]> {
-  const data = await call<{ countries: Country[] }>("/countries");
-  return data.countries;
+  return [{ id: "USA", name: "United States" }];
 }
 
 export interface App {
@@ -107,13 +108,31 @@ export interface App {
   price: number;
 }
 
+interface GetatextPriceEntry {
+  service_name: string;
+  api_name: string;
+  price: string | number;
+  stock?: string | number;
+}
+
 /**
- * Response is a bare array in `data` (not `{ apps: [...] }`). Sold-out
- * services are already excluded server-side, so this can be rendered
- * directly with no filtering.
+ * GET /prices-info -- Getatext's catalog of rentable services + live
+ * price/stock. The `country` argument is accepted (and ignored) purely to
+ * keep this function's signature identical to the old provider's -- there
+ * is no per-country catalog here, it's one flat US catalog.
+ *
+ * Docs show a single example object rather than an array, which reads like
+ * documentation shorthand for "one element of the list" rather than the
+ * literal response shape (every other list-returning Getatext endpoint
+ * returns an array) -- this defensively accepts either an array or a lone
+ * object so a real single-object response still works.
  */
-export async function getApps(country: Country["id"]): Promise<App[]> {
-  return call<App[]>(`/apps/${country}`);
+export async function getApps(_country: string): Promise<App[]> {
+  const data = await call<GetatextPriceEntry[] | GetatextPriceEntry>("/prices-info");
+  const entries = Array.isArray(data) ? data : [data];
+  return entries
+    .filter((e) => e && e.api_name && (e.stock === undefined || Number(e.stock) > 0))
+    .map((e) => ({ code: e.api_name, name: e.service_name, price: Number(e.price) }));
 }
 
 export interface PurchaseResult {
@@ -125,21 +144,38 @@ export interface PurchaseResult {
   balance_after: number;
 }
 
+/**
+ * POST /rent-a-number. `country`/`countryName` are accepted for signature
+ * compatibility with the old provider but unused -- Getatext has no
+ * country concept to pass. `appName` is likewise unused (Getatext returns
+ * the canonical service_name itself in the response, so there's nothing to
+ * forward).
+ */
 export async function purchase(opts: {
-  country: Country["id"];
+  country: string;
   app: string;
   appName?: string;
   countryName?: string;
 }): Promise<PurchaseResult> {
-  return call<PurchaseResult>("/purchase", {
+  const data = await call<{
+    id: number;
+    number: string;
+    service_name: string;
+    price: string | number;
+    new_balance: string | number;
+  }>("/rent-a-number", {
     method: "POST",
-    body: {
-      country: opts.country,
-      app: opts.app,
-      app_name: opts.appName,
-      country_name: opts.countryName,
-    },
+    body: { service: opts.app },
   });
+
+  return {
+    activation_id: String(data.id),
+    phone_number: data.number,
+    service: data.service_name,
+    country: "USA",
+    amount_charged: Number(data.price),
+    balance_after: Number(data.new_balance),
+  };
 }
 
 export interface CheckResult {
@@ -149,29 +185,32 @@ export interface CheckResult {
   phone_number: string;
 }
 
-export async function checkStatus(activationId: string): Promise<CheckResult> {
-  return call<CheckResult>(`/check/${activationId}`);
-}
-
-/** /check-all's per-item status set is wider than single /check's. */
-export interface CheckAllResult {
-  activation_id: string;
-  status: "Completed" | "Waiting" | "Not Found" | "Invalid";
-  code: string | null;
-  /** Present for Completed/Waiting; omitted for Not Found/Invalid. */
-  phone_number?: string;
-}
-
 /**
- * Batched status check, capped at 20 ids per the docs. Response is a bare
- * array in `data` (not `{ results: [...] }`).
+ * POST /rental-status. Getatext's own `status` vocabulary isn't fully
+ * documented (only "active" appears in the docs' example), so this treats
+ * a non-empty `code` as the authoritative "Completed" signal regardless of
+ * the literal status string, and only reads `status` to detect
+ * cancellation -- matching the tri-state (Waiting/Completed/Cancelled)
+ * every caller of this function already expects.
  */
-export async function checkAll(activationIds: string[]): Promise<CheckAllResult[]> {
-  const ids = activationIds.slice(0, 20);
-  return call<CheckAllResult[]>("/check-all", {
-    method: "POST",
-    body: { ids },
-  });
+export async function checkStatus(activationId: string): Promise<CheckResult> {
+  const data = await call<{ id: number; status: string; code: string | null; number: string }>(
+    "/rental-status",
+    { method: "POST", body: { id: numericId(activationId) } }
+  );
+
+  const status: CheckResult["status"] = data.code
+    ? "Completed"
+    : /cancel/i.test(data.status)
+      ? "Cancelled"
+      : "Waiting";
+
+  return {
+    activation_id: String(data.id),
+    status,
+    code: data.code,
+    phone_number: data.number,
+  };
 }
 
 export interface CancelResult {
@@ -180,34 +219,49 @@ export interface CancelResult {
   balance_after: number;
 }
 
+/**
+ * POST /cancel-rental. Getatext's docs don't enumerate this endpoint's
+ * error responses, so failure handling here is defensive rather than
+ * matched against documented strings:
+ *   - if a code has already arrived for this rental (checked via
+ *     /rental-status), this throws with code "CODE_RECEIVED" -- matching
+ *     what every cancel route already special-cases (the code landed right
+ *     as the cancel was requested, so the rental is kept instead of
+ *     cancelled).
+ *   - if the failure message mentions waiting/timing, this throws with
+ *     code "TOO_EARLY" -- Getatext's docs mention accounts without
+ *     "immediate cancellation" must wait 5 minutes, which callers already
+ *     handle as a graceful "try again shortly" message.
+ *   - anything else rethrows as-is; callers fall back to a generic error.
+ */
 export async function cancel(activationId: string): Promise<CancelResult> {
-  return call<CancelResult>(`/cancel/${activationId}`, { method: "POST" });
+  try {
+    const data = await call<{ id: number; code: string | null; cost: string | number; balance: string | number }>(
+      "/cancel-rental",
+      { method: "POST", body: { id: numericId(activationId) } }
+    );
+    return { activation_id: String(data.id), refund: Number(data.cost), balance_after: Number(data.balance) };
+  } catch (e) {
+    if (!(e instanceof DaisySim2Error)) throw e;
+
+    try {
+      const status = await checkStatus(activationId);
+      if (status.status === "Completed" && status.code) {
+        throw new DaisySim2Error(e.message, "CODE_RECEIVED", e.status, e.data);
+      }
+    } catch (inner) {
+      if (inner instanceof DaisySim2Error && inner.code === "CODE_RECEIVED") throw inner;
+      // rental-status lookup itself failed -- fall through to the original error below
+    }
+
+    if (/wait|minute|early/i.test(e.message)) {
+      throw new DaisySim2Error(e.message, "TOO_EARLY", e.status, e.data);
+    }
+    throw e;
+  }
 }
 
-export interface HistoryOrder {
-  activation_id: string;
-  phone_number: string;
-  service: string;
-  service_code: string | null;
-  country: string;
-  status: string;
-  code: string | null;
-  amount_charged: number;
-  created_at: string;
-  completed_at: string | null;
-}
-
-export interface HistoryResponse {
-  orders: HistoryOrder[];
-  pagination: { current_page: number; per_page: number; total: number; last_page: number };
-}
-
-export async function getHistory(opts?: {
-  page?: number;
-  perPage?: number;
-  status?: "completed" | "waiting" | "cancelled";
-}): Promise<HistoryResponse> {
-  return call<HistoryResponse>("/history", {
-    query: { page: opts?.page, per_page: opts?.perPage, status: opts?.status },
-  });
+function numericId(activationId: string): number | string {
+  const n = Number(activationId);
+  return Number.isFinite(n) ? n : activationId;
 }

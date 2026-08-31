@@ -8,16 +8,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * as a backup/faster alternative to polling /api/daisysim/status or
  * /api/daisysim2/status.
  *
- * COVERS BOTH DaisySim PRODUCTS: the DaisySim dashboard only exposes one
- * "Settings -> Webhook URL" field for the whole account, not one per
- * product, and the documented payload has no field that names which
- * product (v1 "All Countries" vs. server7 "US Only") an activation_id
- * belongs to -- both send the exact same shape. So this endpoint doesn't
- * assume a provider up front; it looks the activation_id up across both
- * the "daisysim" and "daisysim2" rows and updates whichever one matches.
- * If DaisySim later turns out to support per-product webhook URLs after
- * all, point US Only at its own URL and this handler still works
- * unchanged (the OR-match is a no-op when only one provider ever matches).
+ * "daisysim2" (the "US Only" page) is no longer backed by DaisySim -- it now
+ * calls Getatext instead (see src/lib/daisysim2.ts) and has its own webhook
+ * at /api/webhooks/getatext. This endpoint still matches against both the
+ * "daisysim" and "daisysim2" provider rows for backward safety, but that
+ * OR-branch is now permanently a no-op for daisysim2: Getatext's rental ids
+ * will never coincidentally match a DaisySim activation_id.
  *
  * NOTE: DaisySim's docs don't describe a signing secret for these webhooks,
  * so this endpoint can't cryptographically verify the sender. It mitigates

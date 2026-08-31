@@ -18,9 +18,9 @@ export default async function UsOnlyPricingPage() {
       <PageHeader
         icon={<IconFlag />}
         title="US Only pricing"
-        subtitle="Set the ₦ price customers pay per DaisySim API 2 (server7) app. Favorites pin to the top here and on the customer-facing page."
+        subtitle="Set the ₦ price customers pay per Getatext service. Favorites pin to the top here and on the customer-facing page."
       />
-      <ServicePricingManager provider="daisysim2" providerLabel="DaisySim (US Only)" country={countryId} />
+      <ServicePricingManager provider="daisysim2" providerLabel="Getatext (US Only)" country={countryId} />
     </div>
   );
 }
