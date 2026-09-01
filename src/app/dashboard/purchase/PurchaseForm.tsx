@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { formatNaira, type Rental } from "@/lib/types";
+import NeedHelp from "@/components/NeedHelp";
 
 type Phase = "idle" | "renting" | "waiting" | "done" | "error";
 
@@ -13,9 +14,13 @@ interface FavoriteService {
 export default function PurchaseForm({
   favorites = [],
   extraActivationEnabled = false,
+  whatsappUrl,
+  telegramUrl,
 }: {
   favorites?: FavoriteService[];
   extraActivationEnabled?: boolean;
+  whatsappUrl?: string | null;
+  telegramUrl?: string | null;
 }) {
   const [service, setService] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
@@ -183,6 +188,8 @@ export default function PurchaseForm({
             {extraInfo}
           </div>
         )}
+
+        <NeedHelp whatsappUrl={whatsappUrl} telegramUrl={telegramUrl} />
 
         <div className="rounded-lg border border-[var(--border)] p-4">
           {rental.status === "waiting" && (

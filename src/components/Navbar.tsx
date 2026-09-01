@@ -38,6 +38,9 @@ export default async function Navbar() {
         </Link>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <Link href="/website" className="text-xs text-white/60 hover:text-white sm:text-sm">
+            Website
+          </Link>
           {!profile && (
             <Link href="/faq" className="hidden text-sm text-white/60 hover:text-white sm:inline">
               FAQ

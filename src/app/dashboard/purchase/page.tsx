@@ -52,7 +52,12 @@ export default async function PurchasePage() {
         }
       />
 
-      <PurchaseForm favorites={favorites} extraActivationEnabled={settings.extra_activation_enabled} />
+      <PurchaseForm
+        favorites={favorites}
+        extraActivationEnabled={settings.extra_activation_enabled}
+        whatsappUrl={settings.whatsapp_url}
+        telegramUrl={settings.telegram_url}
+      />
     </div>
   );
 }

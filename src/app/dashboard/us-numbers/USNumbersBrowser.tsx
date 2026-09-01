@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { formatNaira, type Rental } from "@/lib/types";
+import NeedHelp from "@/components/NeedHelp";
 
 interface Country {
   id: number | string;
@@ -27,7 +28,13 @@ function pickUsCountry(countries: Country[]): Country | null {
   return match ?? countries[0];
 }
 
-export default function USNumbersBrowser() {
+export default function USNumbersBrowser({
+  whatsappUrl,
+  telegramUrl,
+}: {
+  whatsappUrl?: string | null;
+  telegramUrl?: string | null;
+}) {
   const [country, setCountry] = useState<Country | null>(null);
   const [loadingCountry, setLoadingCountry] = useState(true);
   const [apps, setApps] = useState<App[]>([]);
@@ -196,6 +203,8 @@ export default function USNumbersBrowser() {
             {error}
           </div>
         )}
+
+        <NeedHelp whatsappUrl={whatsappUrl} telegramUrl={telegramUrl} />
 
         <div className="rounded-lg border border-[var(--border)] p-4">
           {rental.status === "waiting" && (

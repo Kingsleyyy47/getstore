@@ -189,6 +189,43 @@ export default async function Home() {
         </div>
       </section>
 
+      {/* Build a website -- a distinct promo banner pointing at the
+          separate website-building service, not part of the numbers/
+          accounts wallet flow above. */}
+      <section className="border-t border-[var(--border)]">
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+          <div className="clip-decor overflow-hidden rounded-3xl bg-gradient-to-br from-brand to-emerald-800 p-8 text-white sm:p-12">
+            <div
+              className="pointer-events-none absolute inset-0 opacity-[0.08]"
+              style={{
+                backgroundImage:
+                  "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
+                backgroundSize: "34px 34px",
+              }}
+            />
+            <div className="relative flex flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide">
+                  Also from GetStore
+                </div>
+                <h2 className="text-2xl font-semibold sm:text-3xl">Build a website</h2>
+                <p className="mt-2 max-w-md text-emerald-100/80">
+                  Need more than a wallet? We build fast, good-looking websites that bring your
+                  business customers 24/7 — starting at ₦50,000.
+                </p>
+              </div>
+              <Link
+                href="/website"
+                className="btn bg-white text-brand hover:bg-emerald-50 inline-flex shrink-0 items-center gap-2"
+              >
+                Get a free quote
+                <IconArrowRight />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Stats bar -- diagonal-line pattern, distinct from the hero's
           straight grid and the About/Services patterns above. */}
       <section className="clip-decor bg-gradient-to-br from-emerald-950 via-green-900 to-emerald-800 text-white">

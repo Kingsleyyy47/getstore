@@ -55,7 +55,11 @@ export default async function CountriesPage() {
           {loadError}
         </div>
       ) : (
-        <CountriesBrowser countries={countries} />
+        <CountriesBrowser
+          countries={countries}
+          whatsappUrl={settings.whatsapp_url}
+          telegramUrl={settings.telegram_url}
+        />
       )}
     </div>
   );

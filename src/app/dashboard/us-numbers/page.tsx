@@ -41,7 +41,7 @@ export default async function USNumbersPage() {
         }
       />
 
-      <USNumbersBrowser />
+      <USNumbersBrowser whatsappUrl={settings.whatsapp_url} telegramUrl={settings.telegram_url} />
     </div>
   );
 }

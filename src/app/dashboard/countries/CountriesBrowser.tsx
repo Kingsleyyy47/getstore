@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { formatNaira, type Rental } from "@/lib/types";
+import NeedHelp from "@/components/NeedHelp";
 
 interface Country {
   id: number;
@@ -19,7 +20,15 @@ interface Tier {
   naira_cents: number;
 }
 
-export default function CountriesBrowser({ countries }: { countries: Country[] }) {
+export default function CountriesBrowser({
+  countries,
+  whatsappUrl,
+  telegramUrl,
+}: {
+  countries: Country[];
+  whatsappUrl?: string | null;
+  telegramUrl?: string | null;
+}) {
   const [countryId, setCountryId] = useState("");
   const [services, setServices] = useState<Service[]>([]);
   const [serviceCode, setServiceCode] = useState("");
@@ -198,6 +207,8 @@ export default function CountriesBrowser({ countries }: { countries: Country[] }
             {error}
           </div>
         )}
+
+        <NeedHelp whatsappUrl={whatsappUrl} telegramUrl={telegramUrl} />
 
         <div className="rounded-lg border border-[var(--border)] p-4">
           {rental.status === "waiting" && (
