@@ -1,23 +1,104 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 interface CategoryItem {
   id: string;
   name: string;
   description: string | null;
+  logoUrl: string | null;
   templateCount: number;
+}
+
+/** Small file-picker + preview used for both the create form and inline
+ * edit. Uploads immediately on selection via /api/admin/categories/logo and
+ * hands the resulting public URL back to the parent through onChange. */
+function LogoPicker({
+  logoUrl,
+  onChange,
+  idSuffix,
+}: {
+  logoUrl: string;
+  onChange: (url: string) => void;
+  idSuffix: string;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(file: File) {
+    setUploading(true);
+    setError(null);
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/admin/categories/logo", { method: "POST", body: formData });
+    const json = await res.json();
+    setUploading(false);
+    if (!res.ok) {
+      setError(json.error ?? "Upload failed");
+      return;
+    }
+    onChange(json.url);
+  }
+
+  return (
+    <div>
+      <label className="label" htmlFor={`logo-${idSuffix}`}>
+        Logo
+      </label>
+      <div className="flex items-center gap-3">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-black/5 dark:bg-white/5">
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-[10px] text-[var(--text-muted)]">No logo</span>
+          )}
+        </div>
+        <div className="flex-1">
+          <input
+            ref={inputRef}
+            id={`logo-${idSuffix}`}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+            className="block text-xs text-[var(--text-muted)]"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+            }}
+            disabled={uploading}
+          />
+          {uploading && <p className="mt-1 text-xs text-[var(--text-muted)]">Uploading...</p>}
+          {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+          {logoUrl && !uploading && (
+            <button
+              type="button"
+              className="mt-1 text-xs text-[var(--text-muted)] underline hover:text-[var(--text)]"
+              onClick={() => {
+                onChange("");
+                if (inputRef.current) inputRef.current.value = "";
+              }}
+            >
+              Remove logo
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function CategoryManager({ initial }: { initial: CategoryItem[] }) {
   const [list, setList] = useState(initial);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editLogoUrl, setEditLogoUrl] = useState("");
 
   async function addCategory(e: React.FormEvent) {
     e.preventDefault();
@@ -26,7 +107,7 @@ export default function CategoryManager({ initial }: { initial: CategoryItem[] }
     const res = await fetch("/api/admin/categories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description }),
+      body: JSON.stringify({ name, description, logoUrl }),
     });
     const json = await res.json();
     setBusy(false);
@@ -34,15 +115,20 @@ export default function CategoryManager({ initial }: { initial: CategoryItem[] }
       setError(json.error ?? "Failed to add category");
       return;
     }
-    setList((prev) => [...prev, { ...json.category, templateCount: 0 }]);
+    setList((prev) => [
+      ...prev,
+      { ...json.category, logoUrl: json.category.logo_url ?? null, templateCount: 0 },
+    ]);
     setName("");
     setDescription("");
+    setLogoUrl("");
   }
 
   function startEdit(item: CategoryItem) {
     setEditingId(item.id);
     setEditName(item.name);
     setEditDescription(item.description ?? "");
+    setEditLogoUrl(item.logoUrl ?? "");
   }
 
   async function saveEdit(id: string) {
@@ -50,14 +136,16 @@ export default function CategoryManager({ initial }: { initial: CategoryItem[] }
     const res = await fetch("/api/admin/categories", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, name: editName, description: editDescription }),
+      body: JSON.stringify({ id, name: editName, description: editDescription, logoUrl: editLogoUrl }),
     });
     const json = await res.json();
     if (!res.ok) {
       setError(json.error ?? "Failed to update category");
       return;
     }
-    setList((prev) => prev.map((c) => (c.id === id ? { ...c, ...json.category } : c)));
+    setList((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...json.category, logoUrl: json.category.logo_url ?? null } : c))
+    );
     setEditingId(null);
   }
 
@@ -99,6 +187,7 @@ export default function CategoryManager({ initial }: { initial: CategoryItem[] }
                 onChange={(e) => setEditDescription(e.target.value)}
                 placeholder="Description"
               />
+              <LogoPicker logoUrl={editLogoUrl} onChange={setEditLogoUrl} idSuffix={item.id} />
               <div className="flex gap-2">
                 <button className="btn-primary" onClick={() => saveEdit(item.id)}>
                   Save
@@ -113,11 +202,21 @@ export default function CategoryManager({ initial }: { initial: CategoryItem[] }
               key={item.id}
               className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
             >
-              <div className="min-w-0 break-words">
-                <div className="font-bold">{item.name}</div>
-                <div className="text-sm text-[var(--text-muted)]">
-                  {item.description ?? "—"} &middot; {item.templateCount} product{" "}
-                  {item.templateCount === 1 ? "template" : "templates"}
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-black/5 dark:bg-white/5">
+                  {item.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.logoUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-[9px] text-[var(--text-muted)]">None</span>
+                  )}
+                </div>
+                <div className="min-w-0 break-words">
+                  <div className="font-bold">{item.name}</div>
+                  <div className="text-sm text-[var(--text-muted)]">
+                    {item.description ?? "—"} &middot; {item.templateCount} product{" "}
+                    {item.templateCount === 1 ? "template" : "templates"}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -166,6 +265,7 @@ export default function CategoryManager({ initial }: { initial: CategoryItem[] }
             placeholder="e.g., High-quality Instagram accounts"
           />
         </div>
+        <LogoPicker logoUrl={logoUrl} onChange={setLogoUrl} idSuffix="new" />
         <button className="btn-primary w-full" type="submit" disabled={busy}>
           + {busy ? "Adding..." : "Add Category"}
         </button>

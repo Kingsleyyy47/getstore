@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parseCsv } from "@/lib/csv";
+import { parseCsv, parseTxtCombo, DEFAULT_TXT_FIELD_ORDER } from "@/lib/csv";
 
 interface RowError {
   row: number;
@@ -28,21 +28,43 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "templateId is required" }, { status: 400 });
   }
   if (!file || typeof file === "string") {
-    return NextResponse.json({ error: "A CSV file is required" }, { status: 400 });
+    return NextResponse.json({ error: "A CSV or TXT file is required" }, { status: 400 });
   }
 
+  const admin = createAdminClient();
+
+  // Confirm the template exists before inserting stock against it, and grab
+  // its configured TXT field order while we're at it.
+  const { data: template } = await admin
+    .from("product_templates")
+    .select("id, bulk_format_fields")
+    .eq("id", templateId)
+    .single();
+  if (!template) {
+    return NextResponse.json({ error: "Product template not found" }, { status: 404 });
+  }
+
+  const filename = (file as File).name ?? "";
+  const isTxt = filename.toLowerCase().endsWith(".txt") || (file as File).type === "text/plain";
+
   const text = await (file as File).text();
-  const rows = parseCsv(text);
+  const fieldOrder =
+    Array.isArray(template.bulk_format_fields) && template.bulk_format_fields.length > 0
+      ? template.bulk_format_fields
+      : DEFAULT_TXT_FIELD_ORDER;
+  const rows = isTxt ? parseTxtCombo(text, fieldOrder) : parseCsv(text);
 
   if (rows.length === 0) {
-    return NextResponse.json({ error: "CSV file has no data rows" }, { status: 400 });
+    return NextResponse.json({ error: "File has no data rows" }, { status: 400 });
   }
 
   const errors: RowError[] = [];
   const validRows: Record<string, string | null>[] = [];
 
   rows.forEach((row, index) => {
-    const rowNum = index + 2; // account for header row, 1-indexed
+    // CSV rows are 1-indexed after a header row; TXT combo lists have no
+    // header, so line 1 is the first account.
+    const rowNum = index + (isTxt ? 1 : 2);
     const password = row["password"]?.trim();
     const email = row["email"]?.trim() || null;
     const username = row["username"]?.trim() || null;
@@ -50,6 +72,8 @@ export async function POST(req: Request) {
     const twoFa = (row["two_fa"] || row["two_fa_code"])?.trim() || null;
     const recoveryEmail = row["recovery_email"]?.trim() || null;
     const recoveryEmailPassword = row["recovery_email_password"]?.trim() || null;
+    const field1 = (row["field_1"] || row["extra_field_1"])?.trim() || null;
+    const field2 = (row["field_2"] || row["extra_field_2"])?.trim() || null;
 
     if (!password) {
       errors.push({ row: rowNum, reason: "Missing password" });
@@ -69,6 +93,8 @@ export async function POST(req: Request) {
       two_fa: twoFa,
       recovery_email: recoveryEmail,
       recovery_email_password: recoveryEmailPassword,
+      extra_field_1: field1,
+      extra_field_2: field2,
       created_by: user.id,
     });
   });
@@ -78,18 +104,6 @@ export async function POST(req: Request) {
       { error: "No valid rows to upload", inserted: 0, skipped: errors.length, errors },
       { status: 400 }
     );
-  }
-
-  const admin = createAdminClient();
-
-  // Confirm the template exists before inserting stock against it.
-  const { data: template } = await admin
-    .from("product_templates")
-    .select("id")
-    .eq("id", templateId)
-    .single();
-  if (!template) {
-    return NextResponse.json({ error: "Product template not found" }, { status: 404 });
   }
 
   const { error: insertErr, count } = await admin

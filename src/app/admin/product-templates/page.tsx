@@ -22,6 +22,9 @@ export default async function AdminProductTemplatesPage() {
     available_count: t.available_count,
     category_id: t.category_id,
     categoryName: t.categories?.name ?? null,
+    bulk_format_fields: t.bulk_format_fields ?? null,
+    field_1_label: t.field_1_label ?? null,
+    field_2_label: t.field_2_label ?? null,
   }));
 
   return (

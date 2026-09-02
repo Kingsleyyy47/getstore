@@ -20,6 +20,8 @@ interface Credentials {
   two_fa: string | null;
   recovery_email: string | null;
   recovery_email_password: string | null;
+  extra_field_1: string | null;
+  extra_field_2: string | null;
 }
 
 interface Field {
@@ -35,6 +37,8 @@ export default function OrderDetailsView({
   priceCents,
   createdAt,
   credentials,
+  field1Label,
+  field2Label,
 }: {
   orderId: string;
   platform: string;
@@ -43,6 +47,8 @@ export default function OrderDetailsView({
   priceCents: number;
   createdAt: string;
   credentials: Credentials;
+  field1Label?: string | null;
+  field2Label?: string | null;
 }) {
   const fields: Field[] = [];
   if (credentials.email) fields.push({ label: "Email", value: credentials.email });
@@ -53,6 +59,10 @@ export default function OrderDetailsView({
   if (credentials.recovery_email) fields.push({ label: "Recovery Email", value: credentials.recovery_email });
   if (credentials.recovery_email_password)
     fields.push({ label: "Recovery Email Password", value: credentials.recovery_email_password });
+  if (credentials.extra_field_1)
+    fields.push({ label: field1Label || "Extra Info", value: credentials.extra_field_1 });
+  if (credentials.extra_field_2)
+    fields.push({ label: field2Label || "Extra Info 2", value: credentials.extra_field_2 });
 
   const allText = fields.map((f) => `${f.label}: ${f.value}`).join("\n");
 

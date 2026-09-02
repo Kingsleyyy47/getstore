@@ -74,3 +74,59 @@ function splitCsvRows(text: string): string[][] {
   if (field.length || row.length) pushRow();
   return rows;
 }
+
+/** The full set of fields a bulk-upload TXT line can carry, and the default
+ * positional order used when a product template doesn't specify its own
+ * (see product_templates.bulk_format_fields). */
+export const DEFAULT_TXT_FIELD_ORDER = [
+  "username",
+  "password",
+  "two_fa",
+  "email",
+  "email_password",
+  "recovery_email",
+  "field_1",
+  "field_2",
+] as const;
+
+export type TxtFieldKey = (typeof DEFAULT_TXT_FIELD_ORDER)[number];
+
+/**
+ * Parses a plain-text "combo list" for bulk account upload: one account per
+ * line, fields separated by whichever of `:`, `|`, or a tab shows up in the
+ * file (auto-detected from the first delimiter found across all lines).
+ *
+ * Fields are read positionally according to `fieldOrder` (defaults to
+ * DEFAULT_TXT_FIELD_ORDER) -- different products ship with different field
+ * layouts (e.g. Facebook accounts carry a recovery email + 2FA key that
+ * Instagram/TikTok don't), so the caller passes the specific product
+ * template's configured order.
+ *
+ * Only username/email (at least one) and password are required -- every
+ * other field is optional and may be left blank, e.g. "user:pass:::::"
+ * or simply "user:pass" with nothing after it. Any position beyond the end
+ * of `fieldOrder` is ignored; any field in `fieldOrder` beyond the end of a
+ * line is left blank.
+ */
+export function parseTxtCombo(
+  text: string,
+  fieldOrder: readonly string[] = DEFAULT_TXT_FIELD_ORDER
+): Record<string, string>[] {
+  const lines = text
+    .split(/\r\n|\r|\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length === 0) return [];
+
+  const DELIMITERS = [":", "|", "\t"];
+  const delimiter = DELIMITERS.find((d) => lines.some((l) => l.includes(d))) ?? ":";
+
+  return lines.map((line) => {
+    const parts = line.split(delimiter).map((p) => p.trim());
+    const obj: Record<string, string> = {};
+    fieldOrder.forEach((key, i) => {
+      obj[key] = parts[i] ?? "";
+    });
+    return obj;
+  });
+}

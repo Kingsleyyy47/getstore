@@ -9,6 +9,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const name = String(body?.name ?? "").trim();
   const description = String(body?.description ?? "").trim() || null;
+  const logoUrl = String(body?.logoUrl ?? "").trim() || null;
 
   if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
 
   const { data, error } = await supabase
     .from("categories")
-    .insert({ name, description, created_by: user.id })
+    .insert({ name, description, logo_url: logoUrl, created_by: user.id })
     .select()
     .single();
 
@@ -36,6 +37,7 @@ export async function PATCH(req: Request) {
   const update: Record<string, string | null> = {};
   if (typeof body.name === "string") update.name = body.name.trim();
   if (typeof body.description === "string") update.description = body.description.trim() || null;
+  if (typeof body.logoUrl === "string") update.logo_url = body.logoUrl.trim() || null;
 
   const { data, error } = await supabase
     .from("categories")

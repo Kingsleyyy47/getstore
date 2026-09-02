@@ -177,7 +177,12 @@ export async function getPrices(service?: string, country?: string): Promise<unk
 
 export async function getPricesVerification(service?: string, country?: string): Promise<unknown> {
   const { body } = await call({ action: "getPricesVerification", service, country });
-  return JSON.parse(body);
+  if (body === "BAD_KEY") throw new DaisySMSError("Invalid DaisySMS API key", body);
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new DaisySMSError(`getPricesVerification returned non-JSON: ${body.slice(0, 300)}`, body);
+  }
 }
 
 export interface CatalogEntry {
@@ -204,23 +209,50 @@ export interface CatalogEntry {
  * corrected in a couple of minutes.
  */
 export async function listCatalog(): Promise<CatalogEntry[]> {
-  const raw = (await getPricesVerification()) as Record<
-    string,
-    Record<string, { cost?: number; count?: number }>
-  >;
-  if (!raw || typeof raw !== "object") return [];
+  const raw = (await getPricesVerification()) as unknown;
+  if (!raw || typeof raw !== "object") {
+    throw new DaisySMSError(
+      `getPricesVerification returned a non-object response: ${JSON.stringify(raw).slice(0, 300)}`
+    );
+  }
+
+  // DaisySMS's docs only loosely spell out the field names inside each
+  // per-country entry -- try the common variants handler_api.php-style
+  // APIs use for "unit cost" and "remaining count" before giving up.
+  const COST_KEYS = ["cost", "price", "retail_price", "cost_usd", "Price"];
+  const COUNT_KEYS = ["count", "quantity", "qty", "available", "Qty"];
+
+  function pickNumber(obj: Record<string, unknown>, keys: string[]): number | null {
+    for (const k of keys) {
+      const n = Number(obj[k]);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  }
 
   const entries: CatalogEntry[] = [];
-  for (const [code, byCountry] of Object.entries(raw)) {
+  for (const [code, byCountry] of Object.entries(raw as Record<string, unknown>)) {
     if (!byCountry || typeof byCountry !== "object") continue;
     let best: { cost: number; count: number } | null = null;
-    for (const countryEntry of Object.values(byCountry)) {
-      const cost = Number(countryEntry?.cost);
-      const count = Number(countryEntry?.count ?? 0);
-      if (!Number.isFinite(cost)) continue;
+    for (const countryEntry of Object.values(byCountry as Record<string, unknown>)) {
+      if (!countryEntry || typeof countryEntry !== "object") continue;
+      const entry = countryEntry as Record<string, unknown>;
+      const cost = pickNumber(entry, COST_KEYS);
+      const count = pickNumber(entry, COUNT_KEYS) ?? 0;
+      if (cost === null) continue;
       if (!best || cost < best.cost) best = { cost, count };
     }
     if (best) entries.push({ code, costUsd: best.cost, available: best.count });
   }
+
+  if (entries.length === 0) {
+    // Nothing matched any known field-name shape -- surface the raw
+    // response instead of silently showing "No products found", so the
+    // real field names can be read off and added above.
+    throw new DaisySMSError(
+      `DaisySMS pricing response didn't match any known shape. Raw sample: ${JSON.stringify(raw).slice(0, 500)}`
+    );
+  }
+
   return entries;
 }

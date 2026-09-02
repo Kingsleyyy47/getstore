@@ -13,7 +13,7 @@ export default async function OrderDetailsPage({ params }: { params: { id: strin
   // client below.
   const { data: order } = await supabase
     .from("product_orders")
-    .select("*, product_templates(name, description, categories(name))")
+    .select("*, product_templates(name, description, field_1_label, field_2_label, categories(name))")
     .eq("id", params.id)
     .single();
 
@@ -24,7 +24,9 @@ export default async function OrderDetailsPage({ params }: { params: { id: strin
   const admin = createAdminClient();
   const { data: item } = await admin
     .from("product_stock_items")
-    .select("email, username, password, email_password, two_fa, recovery_email, recovery_email_password")
+    .select(
+      "email, username, password, email_password, two_fa, recovery_email, recovery_email_password, extra_field_1, extra_field_2"
+    )
     .eq("id", order.stock_item_id)
     .single();
 
@@ -39,6 +41,8 @@ export default async function OrderDetailsPage({ params }: { params: { id: strin
       priceCents={order.price_cents}
       createdAt={order.created_at}
       credentials={item}
+      field1Label={order.product_templates?.field_1_label ?? null}
+      field2Label={order.product_templates?.field_2_label ?? null}
     />
   );
 }

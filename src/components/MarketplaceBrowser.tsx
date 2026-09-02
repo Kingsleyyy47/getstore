@@ -12,6 +12,7 @@ interface TemplateItem {
   price_cents: number;
   available_count: number;
   categoryName: string | null;
+  categoryLogoUrl: string | null;
 }
 
 export default function MarketplaceBrowser({ templates }: { templates: TemplateItem[] }) {
@@ -58,31 +59,47 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {list.map((t) => (
-          <div key={t.id} className="card flex flex-col justify-between p-6">
-            <div>
+          <div key={t.id} className="card flex items-center gap-4 p-4 sm:p-5">
+            {t.categoryLogoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={t.categoryLogoUrl}
+                alt=""
+                className="h-14 w-14 shrink-0 rounded-2xl border border-[var(--border)] object-cover sm:h-16 sm:w-16"
+              />
+            ) : (
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] bg-black/5 text-[10px] text-[var(--text-muted)] dark:bg-white/5 sm:h-16 sm:w-16">
+                {t.categoryName ?? "—"}
+              </div>
+            )}
+
+            <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold uppercase tracking-wide text-brand">
                 {t.categoryName ?? "Uncategorized"}
               </div>
-              <div className="mt-1 text-lg font-bold">{t.name}</div>
+              <div className="mt-0.5 line-clamp-2 font-bold leading-snug">{t.name}</div>
               {t.description && (
-                <p className="mt-1 text-sm text-[var(--text-muted)]">{t.description}</p>
+                <p className="mt-1 line-clamp-1 text-sm text-[var(--text-muted)]">{t.description}</p>
               )}
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-xl font-extrabold">{formatNaira(t.price_cents)}</div>
-                <div className="text-xs text-[var(--text-muted)]">
-                  {t.available_count > 0 ? `${t.available_count} in stock` : "Out of stock"}
-                </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="badge">
+                  {t.available_count > 0 ? `${t.available_count} pcs.` : "0 pcs."}
+                </span>
+                <span className="badge font-mono">{formatNaira(t.price_cents)}</span>
               </div>
-              <button
-                className="btn-primary"
-                disabled={busyId === t.id || t.available_count === 0}
-                onClick={() => buy(t.id)}
-              >
-                {busyId === t.id ? "Buying..." : "Buy now"}
-              </button>
             </div>
+
+            <button
+              className="btn-primary shrink-0"
+              disabled={busyId === t.id || t.available_count === 0}
+              onClick={() => buy(t.id)}
+            >
+              {busyId === t.id
+                ? "Buying..."
+                : t.available_count === 0
+                ? "Sold"
+                : "Buy now"}
+            </button>
           </div>
         ))}
       </div>

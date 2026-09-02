@@ -1,11 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 interface Template {
   id: string;
   name: string;
+  bulk_format_fields: string[] | null;
+  field_1_label: string | null;
+  field_2_label: string | null;
 }
+
+const DEFAULT_FIELD_ORDER = ["username", "password", "two_fa", "email", "email_password", "recovery_email", "field_1", "field_2"];
 
 interface UploadResult {
   inserted: number;
@@ -22,13 +27,24 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
   const [result, setResult] = useState<UploadResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const selectedTemplate = useMemo(() => templates.find((t) => t.id === templateId) ?? null, [templates, templateId]);
+  const activeFieldOrder =
+    selectedTemplate?.bulk_format_fields && selectedTemplate.bulk_format_fields.length > 0
+      ? selectedTemplate.bulk_format_fields
+      : DEFAULT_FIELD_ORDER;
+  const field1Label = selectedTemplate?.field_1_label || "field_1";
+  const field2Label = selectedTemplate?.field_2_label || "field_2";
+  const formatPreview = activeFieldOrder
+    .map((f) => (f === "field_1" ? field1Label : f === "field_2" ? field2Label : f))
+    .join(":");
+
   async function upload() {
     if (!templateId) {
       setError("Choose a product template first");
       return;
     }
     if (!file) {
-      setError("Choose a CSV file first");
+      setError("Choose a CSV or TXT file first");
       return;
     }
 
@@ -122,14 +138,14 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
             <path d="M4 20h16" />
           </svg>
         </div>
-        <div className="font-bold">Upload CSV File</div>
+        <div className="font-bold">Upload CSV or TXT File</div>
         <p className="mb-4 text-sm text-[var(--text-muted)]">
-          Choose a CSV file with account credentials
+          Choose a CSV or TXT file with account credentials
         </p>
         <input
           ref={inputRef}
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,text/csv,.txt,text/plain"
           className="mx-auto block text-sm text-[var(--text-muted)]"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
@@ -139,6 +155,38 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
       <button className="btn-primary w-full" onClick={upload} disabled={busy}>
         {busy ? "Uploading..." : "Upload accounts"}
       </button>
+
+      <div>
+        <h3 className="mb-2 text-sm font-bold">TXT Format:</h3>
+        <div className="card space-y-2 p-4 text-sm">
+          {selectedTemplate ? (
+            <p className="text-[var(--text-muted)]">
+              For <strong className="text-[var(--text)]">{selectedTemplate.name}</strong>, one account
+              per line, fields separated by <code className="text-[var(--text)]">:</code>,{" "}
+              <code className="text-[var(--text)]">|</code>, or a tab (auto-detected), in this order
+              (set on the{" "}
+              <a href="/admin/product-templates" className="underline">
+                Product Templates
+              </a>{" "}
+              page):
+            </p>
+          ) : (
+            <p className="text-[var(--text-muted)]">
+              Choose a product template above to see its exact TXT field order — each template can
+              have its own format. Default order shown below:
+            </p>
+          )}
+          <pre className="overflow-x-auto rounded-lg bg-black/5 p-3 text-xs text-[var(--text-muted)] dark:bg-white/5">
+            {formatPreview}
+          </pre>
+          <p className="text-[var(--text-muted)]">
+            Only <code className="text-[var(--text)]">username</code> (or{" "}
+            <code className="text-[var(--text)]">email</code>) and{" "}
+            <code className="text-[var(--text)]">password</code> are required — leave the rest blank,
+            e.g. <code className="text-[var(--text)]">user123:MyPass123</code>.
+          </p>
+        </div>
+      </div>
 
       <div>
         <h3 className="mb-2 text-sm font-bold">CSV Format Requirements:</h3>
@@ -177,6 +225,11 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
               <li>
                 <code className="text-[var(--text)]">username</code> - Account username (if email is
                 primary identifier)
+              </li>
+              <li>
+                <code className="text-[var(--text)]">field_1</code>,{" "}
+                <code className="text-[var(--text)]">field_2</code> - Free-form extra info (PIN,
+                linked phone number, backup codes, etc.)
               </li>
             </ul>
           </div>

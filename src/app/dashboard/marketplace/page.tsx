@@ -13,7 +13,7 @@ export default async function MarketplacePage() {
     supabase.from("wallets").select("*").eq("user_id", profile.id).single(),
     supabase
       .from("product_templates")
-      .select("*, categories(name)")
+      .select("*, categories(name, logo_url)")
       .order("created_at", { ascending: false }),
   ]);
 
@@ -25,6 +25,7 @@ export default async function MarketplacePage() {
     price_cents: t.price_cents,
     available_count: t.available_count,
     categoryName: t.categories?.name ?? null,
+    categoryLogoUrl: t.categories?.logo_url ?? null,
   }));
 
   return (

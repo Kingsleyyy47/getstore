@@ -15,6 +15,7 @@ export default async function AdminCategoriesPage() {
     id: c.id,
     name: c.name,
     description: c.description,
+    logoUrl: c.logo_url ?? null,
     templateCount: c.product_templates?.[0]?.count ?? 0,
   }));
 
