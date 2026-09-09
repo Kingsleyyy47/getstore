@@ -57,48 +57,53 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {list.map((t) => (
-          <div key={t.id} className="card flex items-center gap-4 p-4 sm:p-5">
+          <div key={t.id} className="card flex items-center gap-3 p-3.5 sm:p-4">
             {t.categoryLogoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={t.categoryLogoUrl}
                 alt=""
-                className="h-14 w-14 shrink-0 rounded-2xl border border-[var(--border)] object-cover sm:h-16 sm:w-16"
+                className="h-11 w-11 shrink-0 rounded-full border border-[var(--border)] object-cover sm:h-12 sm:w-12"
               />
             ) : (
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] bg-black/5 text-[10px] text-[var(--text-muted)] dark:bg-white/5 sm:h-16 sm:w-16">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-black/5 text-[9px] text-[var(--text-muted)] dark:bg-white/5 sm:h-12 sm:w-12">
                 {t.categoryName ?? "—"}
               </div>
             )}
 
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold uppercase tracking-wide text-brand">
-                {t.categoryName ?? "Uncategorized"}
-              </div>
-              <div className="mt-0.5 line-clamp-2 font-bold leading-snug">{t.name}</div>
-              {t.description && (
-                <p className="mt-1 line-clamp-1 text-sm text-[var(--text-muted)]">{t.description}</p>
+              {t.categoryName && (
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  {t.categoryName}
+                </div>
               )}
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="badge">
-                  {t.available_count > 0 ? `${t.available_count} pcs.` : "0 pcs."}
+              <div className="line-clamp-2 text-sm font-bold leading-snug">
+                {t.name}
+                {t.description && <span className="font-normal text-[var(--text-muted)]"> {t.description}</span>}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="badge bg-emerald-500/15 font-semibold text-emerald-600 dark:text-emerald-400">
+                  {t.available_count} pcs.
                 </span>
-                <span className="badge font-mono">{formatNaira(t.price_cents)}</span>
+                <span className="badge bg-black/10 font-mono font-semibold text-[var(--text)] dark:bg-white/10">
+                  {formatNaira(t.price_cents)}
+                </span>
               </div>
             </div>
 
             <button
-              className="btn-primary shrink-0"
+              className="btn-primary h-9 shrink-0 gap-1 px-4 text-sm"
               disabled={busyId === t.id || t.available_count === 0}
               onClick={() => buy(t.id)}
             >
-              {busyId === t.id
-                ? "Buying..."
-                : t.available_count === 0
-                ? "Sold"
-                : "Buy now"}
+              {busyId === t.id ? "..." : t.available_count === 0 ? "Sold" : "Buy"}
+              {t.available_count > 0 && busyId !== t.id && (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
+              )}
             </button>
           </div>
         ))}

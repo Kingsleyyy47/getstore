@@ -231,17 +231,31 @@ export async function listCatalog(): Promise<CatalogEntry[]> {
   }
 
   const entries: CatalogEntry[] = [];
-  for (const [code, byCountry] of Object.entries(raw as Record<string, unknown>)) {
-    if (!byCountry || typeof byCountry !== "object") continue;
-    let best: { cost: number; count: number } | null = null;
-    for (const countryEntry of Object.values(byCountry as Record<string, unknown>)) {
-      if (!countryEntry || typeof countryEntry !== "object") continue;
-      const entry = countryEntry as Record<string, unknown>;
-      const cost = pickNumber(entry, COST_KEYS);
-      const count = pickNumber(entry, COUNT_KEYS) ?? 0;
-      if (cost === null) continue;
-      if (!best || cost < best.cost) best = { cost, count };
+  for (const [code, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== "object") continue;
+    const valueObj = value as Record<string, unknown>;
+
+    // The real response is FLAT: { [service]: { cost, count, multi } } --
+    // no per-country nesting at all, despite DaisySMS's docs implying one.
+    // Try that shape first...
+    const directCost = pickNumber(valueObj, COST_KEYS);
+    let best: { cost: number; count: number } | null =
+      directCost !== null ? { cost: directCost, count: pickNumber(valueObj, COUNT_KEYS) ?? 0 } : null;
+
+    // ...and fall back to the nested { [service]: { [countryId]: {cost,
+    // count} } } shape in case a different DaisySMS endpoint/response does
+    // nest by country.
+    if (!best) {
+      for (const countryEntry of Object.values(valueObj)) {
+        if (!countryEntry || typeof countryEntry !== "object") continue;
+        const entry = countryEntry as Record<string, unknown>;
+        const cost = pickNumber(entry, COST_KEYS);
+        const count = pickNumber(entry, COUNT_KEYS) ?? 0;
+        if (cost === null) continue;
+        if (!best || cost < best.cost) best = { cost, count };
+      }
     }
+
     if (best) entries.push({ code, costUsd: best.cost, available: best.count });
   }
 

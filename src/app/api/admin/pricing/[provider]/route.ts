@@ -14,6 +14,29 @@ function isProvider(v: string): v is Provider {
   return (PROVIDERS as string[]).includes(v);
 }
 
+/**
+ * Upserts a bulk-action's rows in chunks instead of one giant statement --
+ * a "select-all + Markup"-style click on a large catalog (Getatext's US
+ * Only list runs 400+ services) can otherwise hit a payload/statement
+ * limit and fail the whole write silently if the caller doesn't check the
+ * result. Chunked here AND every chunk's error is checked and thrown so a
+ * partial or total failure surfaces to the admin instead of pretending to
+ * have saved.
+ */
+async function upsertInChunks(
+  admin: ReturnType<typeof createAdminClient>,
+  rows: Record<string, unknown>[],
+  chunkSize = 200
+) {
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const { error } = await admin
+      .from("provider_service_prices")
+      .upsert(chunk, { onConflict: "provider,country,service_code" });
+    if (error) throw new Error(error.message);
+  }
+}
+
 async function requireAdmin() {
   const supabase = createClient();
   const {
@@ -130,7 +153,7 @@ export async function POST(req: Request, { params }: { params: { provider: strin
         if (!serviceCode) throw new Error("serviceCode is required");
         const naira = body?.customerPriceNaira;
         const customer_price_cents = naira === null || naira === "" ? null : Math.round(Number(naira) * 100);
-        await admin!.from("provider_service_prices").upsert(
+        const { error: upsertErr } = await admin!.from("provider_service_prices").upsert(
           {
             ...base,
             service_code: serviceCode,
@@ -140,6 +163,7 @@ export async function POST(req: Request, { params }: { params: { provider: strin
           },
           { onConflict: "provider,country,service_code" }
         );
+        if (upsertErr) throw new Error(upsertErr.message);
         break;
       }
 
@@ -154,7 +178,7 @@ export async function POST(req: Request, { params }: { params: { provider: strin
         const margin_cents = marginNaira === null || marginNaira === "" ? null : Math.round(Number(marginNaira) * 100);
         const customer_price_cents =
           margin_cents === null ? null : Math.round(costUsd * rate * 100) + margin_cents;
-        await admin!.from("provider_service_prices").upsert(
+        const { error: upsertErr } = await admin!.from("provider_service_prices").upsert(
           {
             ...base,
             service_code: serviceCode,
@@ -164,6 +188,7 @@ export async function POST(req: Request, { params }: { params: { provider: strin
           },
           { onConflict: "provider,country,service_code" }
         );
+        if (upsertErr) throw new Error(upsertErr.message);
         break;
       }
 
@@ -171,39 +196,44 @@ export async function POST(req: Request, { params }: { params: { provider: strin
         const serviceCode = String(body?.serviceCode ?? "");
         const autoMarkup = Boolean(body?.autoMarkup);
         if (!serviceCode) throw new Error("serviceCode is required");
-        await admin!.from("provider_service_prices").upsert(
-          {
-            ...base,
-            service_code: serviceCode,
-            service_name: body?.serviceName ?? null,
-            auto_markup: autoMarkup,
-            // Turning auto-markup on hands price control to the live
-            // cost+margin formula -- clear any frozen override so it
-            // actually takes effect.
-            ...(autoMarkup ? { customer_price_cents: null } : {}),
-          },
-          { onConflict: "provider,country,service_code" }
-        );
+        {
+          const { error: upsertErr } = await admin!.from("provider_service_prices").upsert(
+            {
+              ...base,
+              service_code: serviceCode,
+              service_name: body?.serviceName ?? null,
+              auto_markup: autoMarkup,
+              // Turning auto-markup on hands price control to the live
+              // cost+margin formula -- clear any frozen override so it
+              // actually takes effect.
+              ...(autoMarkup ? { customer_price_cents: null } : {}),
+            },
+            { onConflict: "provider,country,service_code" }
+          );
+          if (upsertErr) throw new Error(upsertErr.message);
+        }
         break;
       }
 
       case "toggle-enabled": {
         const serviceCode = String(body?.serviceCode ?? "");
         if (!serviceCode) throw new Error("serviceCode is required");
-        await admin!.from("provider_service_prices").upsert(
+        const { error: upsertErr } = await admin!.from("provider_service_prices").upsert(
           { ...base, service_code: serviceCode, service_name: body?.serviceName ?? null, is_enabled: Boolean(body?.enabled) },
           { onConflict: "provider,country,service_code" }
         );
+        if (upsertErr) throw new Error(upsertErr.message);
         break;
       }
 
       case "toggle-favorite": {
         const serviceCode = String(body?.serviceCode ?? "");
         if (!serviceCode) throw new Error("serviceCode is required");
-        await admin!.from("provider_service_prices").upsert(
+        const { error: upsertErr } = await admin!.from("provider_service_prices").upsert(
           { ...base, service_code: serviceCode, service_name: body?.serviceName ?? null, is_favorite: Boolean(body?.favorite) },
           { onConflict: "provider,country,service_code" }
         );
+        if (upsertErr) throw new Error(upsertErr.message);
         break;
       }
 
@@ -224,7 +254,7 @@ export async function POST(req: Request, { params }: { params: { provider: strin
           auto_markup: keepAutoApplying,
           customer_price_cents: Math.round(Number(it.costUsd) * settings.usd_to_ngn_rate * 100) + margin_cents,
         }));
-        await admin!.from("provider_service_prices").upsert(rows, { onConflict: "provider,country,service_code" });
+        await upsertInChunks(admin!, rows);
         break;
       }
 
@@ -238,7 +268,7 @@ export async function POST(req: Request, { params }: { params: { provider: strin
           service_name: it.name ?? null,
           is_enabled: enabled,
         }));
-        await admin!.from("provider_service_prices").upsert(rows, { onConflict: "provider,country,service_code" });
+        await upsertInChunks(admin!, rows);
         break;
       }
 

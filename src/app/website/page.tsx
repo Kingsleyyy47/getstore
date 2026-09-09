@@ -13,8 +13,6 @@ import {
   IconCheck,
 } from "@/components/icons";
 
-const CONTACT_URL = "https://t.me/LEGITSUPPORT2";
-
 const REASONS = [
   {
     icon: <IconSearch />,
@@ -128,6 +126,11 @@ const TRUST = [
 
 export default async function WebsitePage() {
   const links = await getSupportLinks();
+  // Prefer Telegram, then WhatsApp, then the generic support link -- all
+  // configured in Admin -> Support. Falls back to the site's own contact
+  // channel if none are set, so the CTAs never point at a dead/placeholder
+  // link.
+  const CONTACT_URL = links.telegram_url || links.whatsapp_url || links.support_url || "/#";
 
   return (
     <div className="overflow-x-hidden">

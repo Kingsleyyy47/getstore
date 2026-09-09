@@ -31,6 +31,7 @@ export default function CountriesBrowser({
 }) {
   const [countryId, setCountryId] = useState("");
   const [services, setServices] = useState<Service[]>([]);
+  const [serviceSearch, setServiceSearch] = useState("");
   const [serviceCode, setServiceCode] = useState("");
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [selectedTier, setSelectedTier] = useState<number | null>(null);
@@ -73,6 +74,7 @@ export default function CountriesBrowser({
   async function onSelectCountry(id: string) {
     setCountryId(id);
     setServices([]);
+    setServiceSearch("");
     setServiceCode("");
     setTiers([]);
     setSelectedTier(null);
@@ -179,10 +181,17 @@ export default function CountriesBrowser({
     setInfo(null);
     setCountryId("");
     setServices([]);
+    setServiceSearch("");
     setServiceCode("");
     setTiers([]);
     setSelectedTier(null);
   }
+
+  // Keep the currently selected service visible even if it doesn't match
+  // the search text, so picking one doesn't make the <select> look empty.
+  const filteredServices = services.filter(
+    (s) => s.code === serviceCode || s.name.toLowerCase().includes(serviceSearch.trim().toLowerCase())
+  );
 
   if (rental) {
     return (
@@ -276,6 +285,15 @@ export default function CountriesBrowser({
           <label className="label" htmlFor="service">
             Service
           </label>
+          {!loadingServices && services.length > 0 && (
+            <input
+              className="input mb-2"
+              type="text"
+              placeholder="Search services..."
+              value={serviceSearch}
+              onChange={(e) => setServiceSearch(e.target.value)}
+            />
+          )}
           <select
             className="input"
             id="service"
@@ -284,13 +302,16 @@ export default function CountriesBrowser({
             disabled={loadingServices}
           >
             <option value="">{loadingServices ? "Loading..." : "Choose a service"}</option>
-            {services.map((s) => (
+            {filteredServices.map((s) => (
               <option key={s.code} value={s.code}>
                 {s.is_favorite ? "★ " : ""}
                 {s.name}
               </option>
             ))}
           </select>
+          {!loadingServices && services.length > 0 && filteredServices.length === 0 && (
+            <p className="mt-1 text-xs text-[var(--text-muted)]">No services match &quot;{serviceSearch}&quot;.</p>
+          )}
         </div>
       )}
 

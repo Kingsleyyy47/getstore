@@ -2,23 +2,20 @@ import Link from "next/link";
 import { IconStore, IconPhone, IconFlag, IconGlobe } from "@/components/icons";
 
 /**
- * Bento-style quick actions grid. "Buy Account" is the featured tile
- * (spans both rows on desktop) since the marketplace is the widest catalog;
- * "Other Countries" gets a wide tile since it covers the most destinations.
- * Layout collapses to a single column on mobile, 2-up on tablet, and the
- * full 3-column bento from lg up.
+ * Quick actions grid: a plain 2x2 of equal-sized tiles (1 column on the
+ * smallest screens, 2 columns from sm up), so all four actions get the
+ * same visual weight.
  */
 export default function QuickActions() {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3">
       <Tile
         href="/dashboard/marketplace"
-        icon={<IconStore size={22} />}
+        icon={<IconStore size={18} />}
         label="Buy Account"
-        sub="Verified logins across 40+ platforms, delivered instantly from the marketplace."
+        sub="Verified logins, 40+ platforms"
         tag="Most popular"
         gradient="from-violet-500 to-violet-800"
-        featured
       />
       <Tile
         href="/dashboard/purchase"
@@ -40,7 +37,6 @@ export default function QuickActions() {
         label="Other Countries"
         sub="190+ countries available"
         gradient="from-brand to-emerald-800"
-        wide
       />
     </div>
   );
@@ -53,8 +49,6 @@ function Tile({
   sub,
   tag,
   gradient,
-  featured,
-  wide,
 }: {
   href: string;
   icon: React.ReactNode;
@@ -62,15 +56,11 @@ function Tile({
   sub: string;
   tag?: string;
   gradient: string;
-  featured?: boolean;
-  wide?: boolean;
 }) {
   return (
     <Link
       href={href}
-      className={`group relative isolate flex min-h-[128px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br p-5 text-white transition-transform hover:-translate-y-0.5 ${gradient} ${
-        featured ? "row-span-2 min-h-[268px]" : ""
-      } ${wide ? "sm:col-span-2" : ""}`}
+      className={`group relative isolate flex min-h-[128px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br p-4 text-white transition-transform hover:-translate-y-0.5 sm:p-5 ${gradient}`}
     >
       <div
         className="pointer-events-none absolute inset-0 -z-10"
@@ -80,11 +70,7 @@ function Tile({
       />
 
       <div className="flex items-start justify-between">
-        <span
-          className={`flex items-center justify-center rounded-xl bg-white/20 transition-transform group-hover:scale-105 ${
-            featured ? "h-11 w-11" : "h-10 w-10"
-          }`}
-        >
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 transition-transform group-hover:scale-105">
           {icon}
         </span>
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
@@ -100,7 +86,7 @@ function Tile({
             {tag}
           </span>
         )}
-        <div className={`font-bold ${featured ? "text-lg" : "text-sm"}`}>{label}</div>
+        <div className="text-sm font-bold">{label}</div>
         <div className="mt-1 text-xs leading-snug text-white/75">{sub}</div>
       </div>
     </Link>
