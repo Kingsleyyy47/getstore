@@ -24,6 +24,7 @@ export default async function MarketplacePage() {
     description: t.description,
     price_cents: t.price_cents,
     available_count: t.available_count,
+    categoryId: t.category_id ?? null,
     categoryName: t.categories?.name ?? null,
     categoryLogoUrl: t.categories?.logo_url ?? null,
   }));

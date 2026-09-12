@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * Minimal, dependency-free CSV parser. Handles quoted fields (including
  * embedded commas, newlines, and escaped "" quotes), \n and \r\n line

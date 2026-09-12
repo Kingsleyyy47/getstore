@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatNaira, type Rental } from "@/lib/types";
 import NeedHelp from "@/components/NeedHelp";
 
@@ -11,8 +11,14 @@ interface FavoriteService {
   serviceName: string | null;
 }
 
+interface Service {
+  code: string;
+  name: string;
+  naira_cents: number;
+  is_favorite?: boolean;
+}
+
 export default function PurchaseForm({
-  favorites = [],
   extraActivationEnabled = false,
   whatsappUrl,
   telegramUrl,
@@ -22,6 +28,10 @@ export default function PurchaseForm({
   whatsappUrl?: string | null;
   telegramUrl?: string | null;
 }) {
+  const [services, setServices] = useState<Service[]>([]);
+  const [loadingServices, setLoadingServices] = useState(true);
+  const [servicesError, setServicesError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [service, setService] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -32,6 +42,40 @@ export default function PurchaseForm({
   const [now, setNow] = useState(() => Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoadingServices(true);
+      setServicesError(null);
+      try {
+        const res = await fetch("/api/daisysms/services");
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "Failed to load services");
+        setServices(json.services ?? []);
+      } catch (e) {
+        setServicesError(e instanceof Error ? e.message : "Failed to load services");
+      } finally {
+        setLoadingServices(false);
+      }
+    })();
+  }, []);
+
+  // Keep the currently selected service visible even if it doesn't match
+  // the search text, so picking one doesn't make the list look empty.
+  const filteredServices = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return services;
+    return services.filter((s) => s.code === service || s.name.toLowerCase().includes(q));
+  }, [services, search, service]);
+
+  // When a service is picked, default the price cap to the price shown in
+  // the list so the customer is never charged more than what they saw --
+  // still editable if they want a tighter cap.
+  function pickService(code: string) {
+    setService(code);
+    const found = services.find((s) => s.code === code);
+    if (found) setMaxPrice((found.naira_cents / 100).toString());
+  }
 
   useEffect(() => {
     return () => {
@@ -246,40 +290,47 @@ export default function PurchaseForm({
           {error}
         </div>
       )}
-      {favorites.length > 0 && (
-        <div>
-          <div className="label">Popular services</div>
-          <div className="flex flex-wrap gap-2">
-            {favorites.map((f) => (
-              <button
-                key={f.serviceCode}
-                type="button"
-                onClick={() => setService(f.serviceCode)}
-                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  service === f.serviceCode
-                    ? "border-brand bg-brand/10 text-brand"
-                    : "border-[var(--border)] hover:border-[var(--hover-border)]"
-                }`}
-              >
-                {f.serviceName ?? f.serviceCode}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div>
-        <label className="label" htmlFor="service">
-          Service shortcode
-        </label>
-        <input
-          className="input"
-          id="service"
-          value={service}
-          onChange={(e) => setService(e.target.value)}
-          placeholder="e.g. ds"
-          required
-        />
+        <div className="label">Service</div>
+        {!loadingServices && !servicesError && services.length > 0 && (
+          <input
+            className="input mb-2"
+            type="text"
+            placeholder="Search services..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        )}
+        {loadingServices && <p className="text-sm text-[var(--text-muted)]">Loading services...</p>}
+        {!loadingServices && servicesError && <p className="text-sm text-red-400">{servicesError}</p>}
+        {!loadingServices && !servicesError && services.length === 0 && (
+          <p className="text-sm text-[var(--text-muted)]">No services available right now.</p>
+        )}
+        {!loadingServices && !servicesError && services.length > 0 && filteredServices.length === 0 && (
+          <p className="text-sm text-[var(--text-muted)]">No services match &quot;{search}&quot;.</p>
+        )}
+        <div className="max-h-72 space-y-2 overflow-y-auto">
+          {filteredServices.map((s) => (
+            <label
+              key={s.code}
+              className={`flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm transition-colors ${
+                service === s.code ? "border-brand bg-brand/5" : "border-[var(--border)]"
+              }`}
+            >
+              <span className="flex items-center gap-2 truncate">
+                <input
+                  type="radio"
+                  name="service"
+                  checked={service === s.code}
+                  onChange={() => pickService(s.code)}
+                />
+                {s.is_favorite && <span className="text-amber-500">★</span>}
+                <span className="truncate">{s.name}</span>
+              </span>
+              <span className="font-bold text-[var(--text)]">{formatNaira(s.naira_cents)}</span>
+            </label>
+          ))}
+        </div>
       </div>
       <div>
         <label className="label" htmlFor="max_price">
@@ -296,7 +347,7 @@ export default function PurchaseForm({
           placeholder="Leave blank to use your full balance as the cap"
         />
       </div>
-      <button className="btn-primary w-full" type="submit" disabled={phase === "renting"}>
+      <button className="btn-primary w-full" type="submit" disabled={phase === "renting" || !service}>
         {phase === "renting" ? "Renting..." : "Rent number"}
       </button>
     </form>
