@@ -379,7 +379,7 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
                         {c.label}
                         {preview.kind === "csv" && (
                           <div className="font-normal text-[10px] text-[var(--text-muted)]">
-                            from &quot;{c.header}&quot;
+                            from &quot;{(c as CsvPreviewColumn).header}&quot;
                           </div>
                         )}
                       </th>
