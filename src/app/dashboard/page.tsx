@@ -38,10 +38,12 @@ export default async function DashboardPage() {
       .eq("user_id", profile.id)
       .eq("status", ACTIVE_RENTAL_STATUS),
     getSettings(),
+    // No available_count filter here -- same as the full Marketplace page,
+    // sold-out items still load and ProductsSection shows them with a
+    // "Sold out" badge and a disabled Buy button instead of hiding them.
     supabase
       .from("product_templates")
-      .select("id, name, description, price_cents, available_count, category_id, categories(name, logo_url)")
-      .gt("available_count", 0),
+      .select("id, name, description, price_cents, available_count, category_id, categories(name, logo_url)"),
     supabase
       .from("rentals")
       .select("status, price_cents")

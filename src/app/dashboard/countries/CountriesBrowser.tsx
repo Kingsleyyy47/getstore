@@ -30,7 +30,9 @@ export default function CountriesBrowser({
   telegramUrl?: string | null;
 }) {
   const [countryId, setCountryId] = useState("");
-  const [countrySearch, setCountrySearch] = useState("");
+  const [countryQuery, setCountryQuery] = useState("");
+  const [countryOpen, setCountryOpen] = useState(false);
+  const countryBoxRef = useRef<HTMLDivElement>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [serviceSearch, setServiceSearch] = useState("");
   const [serviceCode, setServiceCode] = useState("");
@@ -51,6 +53,17 @@ export default function CountriesBrowser({
       if (pollRef.current) clearInterval(pollRef.current);
       if (tickRef.current) clearInterval(tickRef.current);
     };
+  }, []);
+
+  // Close the country combobox dropdown when clicking anywhere outside it.
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (countryBoxRef.current && !countryBoxRef.current.contains(e.target as Node)) {
+        setCountryOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   // Drives the "you can cancel in Xs" countdown below -- ticks once a
@@ -181,7 +194,8 @@ export default function CountriesBrowser({
     setError(null);
     setInfo(null);
     setCountryId("");
-    setCountrySearch("");
+    setCountryQuery("");
+    setCountryOpen(false);
     setServices([]);
     setServiceSearch("");
     setServiceCode("");
@@ -189,15 +203,30 @@ export default function CountriesBrowser({
     setSelectedTier(null);
   }
 
-  // Keep the currently selected country/service visible even if it doesn't
-  // match the search text, so picking one doesn't make the <select> look
-  // empty.
-  const filteredCountries = countries.filter(
-    (c) => String(c.id) === countryId || c.name.toLowerCase().includes(countrySearch.trim().toLowerCase())
-  );
+  // Keep the currently selected service visible even if it doesn't match
+  // the search text, so picking one doesn't make the <select> look empty.
   const filteredServices = services.filter(
     (s) => s.code === serviceCode || s.name.toLowerCase().includes(serviceSearch.trim().toLowerCase())
   );
+
+  const filteredCountries = countries.filter((c) =>
+    c.name.toLowerCase().includes(countryQuery.trim().toLowerCase())
+  );
+
+  function selectCountry(c: Country) {
+    setCountryQuery(c.name);
+    setCountryOpen(false);
+    onSelectCountry(String(c.id));
+  }
+
+  function handleCountryInputChange(value: string) {
+    setCountryQuery(value);
+    setCountryOpen(true);
+    // Typing again after a country was already picked -- clear the stale
+    // selection (and dependent service/tier state) until they pick a new
+    // one from the dropdown.
+    if (countryId) onSelectCountry("");
+  }
 
   if (rental) {
     return (
@@ -267,34 +296,42 @@ export default function CountriesBrowser({
         </div>
       )}
 
-      <div>
+      <div ref={countryBoxRef} className="relative">
         <label className="label" htmlFor="country">
           Country
         </label>
-        {countries.length > 0 && (
-          <input
-            className="input mb-2"
-            type="text"
-            placeholder="Search countries..."
-            value={countrySearch}
-            onChange={(e) => setCountrySearch(e.target.value)}
-          />
-        )}
-        <select
+        <input
           className="input"
           id="country"
-          value={countryId}
-          onChange={(e) => onSelectCountry(e.target.value)}
-        >
-          <option value="">Choose a country</option>
-          {filteredCountries.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        {countries.length > 0 && filteredCountries.length === 0 && (
-          <p className="mt-1 text-xs text-[var(--text-muted)]">No countries match &quot;{countrySearch}&quot;.</p>
+          type="text"
+          autoComplete="off"
+          placeholder={countries.length === 0 ? "Loading countries..." : "Search or choose a country..."}
+          value={countryQuery}
+          onFocus={() => setCountryOpen(true)}
+          onChange={(e) => handleCountryInputChange(e.target.value)}
+          disabled={countries.length === 0}
+        />
+        {countryOpen && countries.length > 0 && (
+          <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
+            {filteredCountries.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-[var(--text-muted)]">
+                No countries match &quot;{countryQuery}&quot;.
+              </p>
+            ) : (
+              filteredCountries.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => selectCountry(c)}
+                  className={`block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${
+                    String(c.id) === countryId ? "bg-brand/10 text-brand" : ""
+                  }`}
+                >
+                  {c.name}
+                </button>
+              ))
+            )}
+          </div>
         )}
       </div>
 
