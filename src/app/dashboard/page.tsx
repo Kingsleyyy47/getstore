@@ -2,13 +2,10 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getSettings } from "@/lib/settings";
 import type { Wallet } from "@/lib/types";
-import * as daisysim from "@/lib/daisysim";
+import { getProductLogoMap, normalizeProductName } from "@/lib/productLogos";
 import BalanceCard from "@/components/BalanceCard";
 import QuickActions from "@/components/QuickActions";
 import DashboardFundingCard from "@/components/DashboardFundingCard";
-import USOnlySection from "@/components/dashboard/USOnlySection";
-import USACanadaSection from "@/components/dashboard/USACanadaSection";
-import AllCountriesSection from "@/components/dashboard/AllCountriesSection";
 import ProductsSection from "@/components/dashboard/ProductsSection";
 import Link from "next/link";
 import { IconPlus } from "@/components/icons";
@@ -32,6 +29,7 @@ export default async function DashboardPage() {
     { data: templates },
     { data: monthRentals },
     { data: monthOrders },
+    productLogoMap,
   ] = await Promise.all([
     supabase.from("wallets").select("*").eq("user_id", profile.id).single(),
     supabase
@@ -42,7 +40,7 @@ export default async function DashboardPage() {
     getSettings(),
     supabase
       .from("product_templates")
-      .select("id, name, description, price_cents, available_count")
+      .select("id, name, description, price_cents, available_count, category_id, categories(name, logo_url)")
       .gt("available_count", 0),
     supabase
       .from("rentals")
@@ -54,6 +52,7 @@ export default async function DashboardPage() {
       .select("price_cents")
       .eq("user_id", profile.id)
       .gte("created_at", thisMonthStart.toISOString()),
+    getProductLogoMap(),
   ]);
 
   const w = wallet as Wallet | null;
@@ -64,27 +63,24 @@ export default async function DashboardPage() {
       .reduce((sum: number, r: any) => sum + (r.price_cents ?? 0), 0) +
     (monthOrders ?? []).reduce((sum: number, o: any) => sum + (o.price_cents ?? 0), 0);
 
-  // Flat, randomly-ordered list of every in-stock product -- deliberately
-  // NOT grouped by category, unlike the full Marketplace page.
-  const productItems = ((templates ?? []) as any[])
-    .map((t) => ({
-      id: t.id as string,
-      name: t.name as string,
-      description: (t.description ?? null) as string | null,
-      price_cents: t.price_cents as number,
-      available_count: t.available_count as number,
-    }))
-    .sort(() => Math.random() - 0.5);
-
-  let countries: { id: number; name: string }[] = [];
-  let countriesError: string | null = null;
-  if (settings.countries_enabled) {
-    try {
-      countries = await daisysim.getCountries();
-    } catch (e) {
-      countriesError = e instanceof daisysim.DaisySimError ? e.message : "Failed to load countries";
-    }
-  }
+  // Same category + product data the full Marketplace page uses -- the
+  // dashboard preview shuffles both the category order and each category's
+  // products client-side instead of showing them alphabetically/by recency.
+  const productItems = ((templates ?? []) as any[]).map((t) => ({
+    id: t.id as string,
+    name: t.name as string,
+    description: (t.description ?? null) as string | null,
+    price_cents: t.price_cents as number,
+    available_count: t.available_count as number,
+    categoryId: (t.category_id ?? null) as string | null,
+    categoryName: (t.categories?.name ?? null) as string | null,
+    categoryLogoUrl: (t.categories?.logo_url ?? null) as string | null,
+    // Site-wide, name-matched logo (Admin -> Logo) takes priority over
+    // the category logo when both exist.
+    logoUrl: (productLogoMap.get(normalizeProductName(t.name)) ?? t.categories?.logo_url ?? null) as
+      | string
+      | null,
+  }));
 
   return (
     <div className="space-y-6">
@@ -102,28 +98,7 @@ export default async function DashboardPage() {
         <QuickActions />
       </section>
 
-      <section className="space-y-4">
-        {settings.us_numbers_enabled && (
-          <USOnlySection whatsappUrl={settings.whatsapp_url} telegramUrl={settings.telegram_url} />
-        )}
-
-        {settings.numbers_enabled && (
-          <USACanadaSection
-            extraActivationEnabled={settings.extra_activation_enabled}
-            whatsappUrl={settings.whatsapp_url}
-            telegramUrl={settings.telegram_url}
-          />
-        )}
-
-        {settings.countries_enabled && (
-          <AllCountriesSection
-            countries={countries}
-            loadError={countriesError}
-            whatsappUrl={settings.whatsapp_url}
-            telegramUrl={settings.telegram_url}
-          />
-        )}
-
+      <section>
         <ProductsSection templates={productItems} />
       </section>
 

@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatNaira, type Wallet } from "@/lib/types";
+import { getProductLogoMap, normalizeProductName } from "@/lib/productLogos";
 import MarketplaceBrowser from "@/components/MarketplaceBrowser";
 import PageHeader from "@/components/PageHeader";
 import { IconStore } from "@/components/icons";
@@ -9,12 +10,13 @@ export default async function MarketplacePage() {
   const profile = await requireUser();
   const supabase = createClient();
 
-  const [{ data: wallet }, { data: templates }] = await Promise.all([
+  const [{ data: wallet }, { data: templates }, productLogoMap] = await Promise.all([
     supabase.from("wallets").select("*").eq("user_id", profile.id).single(),
     supabase
       .from("product_templates")
       .select("*, categories(name, logo_url)")
       .order("created_at", { ascending: false }),
+    getProductLogoMap(),
   ]);
 
   const w = wallet as Wallet | null;
@@ -27,6 +29,9 @@ export default async function MarketplacePage() {
     categoryId: t.category_id ?? null,
     categoryName: t.categories?.name ?? null,
     categoryLogoUrl: t.categories?.logo_url ?? null,
+    // Site-wide, name-matched logo (set in Admin -> Logo) takes priority
+    // over the category logo when both exist.
+    logoUrl: productLogoMap.get(normalizeProductName(t.name)) ?? t.categories?.logo_url ?? null,
   }));
 
   return (

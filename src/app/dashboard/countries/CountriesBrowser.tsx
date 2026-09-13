@@ -30,6 +30,7 @@ export default function CountriesBrowser({
   telegramUrl?: string | null;
 }) {
   const [countryId, setCountryId] = useState("");
+  const [countrySearch, setCountrySearch] = useState("");
   const [services, setServices] = useState<Service[]>([]);
   const [serviceSearch, setServiceSearch] = useState("");
   const [serviceCode, setServiceCode] = useState("");
@@ -180,6 +181,7 @@ export default function CountriesBrowser({
     setError(null);
     setInfo(null);
     setCountryId("");
+    setCountrySearch("");
     setServices([]);
     setServiceSearch("");
     setServiceCode("");
@@ -187,8 +189,12 @@ export default function CountriesBrowser({
     setSelectedTier(null);
   }
 
-  // Keep the currently selected service visible even if it doesn't match
-  // the search text, so picking one doesn't make the <select> look empty.
+  // Keep the currently selected country/service visible even if it doesn't
+  // match the search text, so picking one doesn't make the <select> look
+  // empty.
+  const filteredCountries = countries.filter(
+    (c) => String(c.id) === countryId || c.name.toLowerCase().includes(countrySearch.trim().toLowerCase())
+  );
   const filteredServices = services.filter(
     (s) => s.code === serviceCode || s.name.toLowerCase().includes(serviceSearch.trim().toLowerCase())
   );
@@ -265,6 +271,15 @@ export default function CountriesBrowser({
         <label className="label" htmlFor="country">
           Country
         </label>
+        {countries.length > 0 && (
+          <input
+            className="input mb-2"
+            type="text"
+            placeholder="Search countries..."
+            value={countrySearch}
+            onChange={(e) => setCountrySearch(e.target.value)}
+          />
+        )}
         <select
           className="input"
           id="country"
@@ -272,12 +287,15 @@ export default function CountriesBrowser({
           onChange={(e) => onSelectCountry(e.target.value)}
         >
           <option value="">Choose a country</option>
-          {countries.map((c) => (
+          {filteredCountries.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
         </select>
+        {countries.length > 0 && filteredCountries.length === 0 && (
+          <p className="mt-1 text-xs text-[var(--text-muted)]">No countries match &quot;{countrySearch}&quot;.</p>
+        )}
       </div>
 
       {countryId && (

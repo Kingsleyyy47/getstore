@@ -25,6 +25,7 @@ const adminItems: SidebarItem[] = [
   { href: "/admin", label: "Overview", icon: <IconHome /> },
   { href: "/admin/categories", label: "Categories", icon: <IconTag /> },
   { href: "/admin/product-templates", label: "Product Templates", icon: <IconBox /> },
+  { href: "/admin/logo", label: "Logo", icon: <IconImage /> },
   { href: "/admin/bulk-upload", label: "Bulk Upload", icon: <IconUpload /> },
   { href: "/admin/customers", label: "Customers", icon: <IconUsers /> },
   { href: "/admin/topups", label: "Top-ups", icon: <IconWallet /> },
@@ -269,6 +270,15 @@ function IconBox() {
       <path d="M21 8 12 3 3 8l9 5 9-5Z" />
       <path d="M3 8v8l9 5 9-5V8" />
       <path d="M12 13v8" />
+    </svg>
+  );
+}
+function IconImage() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-5-5L5 21" />
     </svg>
   );
 }

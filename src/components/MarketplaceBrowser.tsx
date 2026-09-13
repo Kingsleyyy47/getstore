@@ -14,6 +14,11 @@ interface TemplateItem {
   categoryId: string | null;
   categoryName: string | null;
   categoryLogoUrl: string | null;
+  // Resolved server-side: a site-wide, name-matched logo (Admin -> Logo)
+  // if one exists for this product's name, else falls back to the
+  // category logo. Used for the per-product icon; the category banner
+  // above the grid still always uses categoryLogoUrl.
+  logoUrl?: string | null;
 }
 
 // A rotating set of gradients so each category banner reads distinctly
@@ -169,10 +174,10 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {g.items.map((t) => (
                 <div key={t.id} className="card flex items-center gap-3 p-3.5 sm:p-4">
-                  {t.categoryLogoUrl ? (
+                  {t.logoUrl ?? t.categoryLogoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={t.categoryLogoUrl}
+                      src={t.logoUrl ?? t.categoryLogoUrl ?? undefined}
                       alt=""
                       className="h-11 w-11 shrink-0 rounded-full border border-[var(--border)] object-cover sm:h-12 sm:w-12"
                     />
