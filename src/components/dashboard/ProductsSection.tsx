@@ -238,7 +238,12 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">{t.name}</div>
+                    <div className="text-sm font-semibold leading-snug">
+                      {t.name}
+                      {t.description && (
+                        <span className="font-normal text-[var(--text-muted)]"> {t.description}</span>
+                      )}
+                    </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       <span className="badge bg-emerald-500/15 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                         {t.available_count === 0 ? "Sold out" : `${t.available_count} pcs.`}

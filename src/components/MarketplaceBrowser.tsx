@@ -188,7 +188,7 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
                   )}
 
                   <div className="min-w-0 flex-1">
-                    <div className="line-clamp-2 text-sm font-bold leading-snug">
+                    <div className="text-sm font-bold leading-snug">
                       {t.name}
                       {t.description && (
                         <span className="font-normal text-[var(--text-muted)]"> {t.description}</span>
