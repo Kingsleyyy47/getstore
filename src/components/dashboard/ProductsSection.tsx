@@ -38,8 +38,6 @@ const BANNER_GRADIENTS = [
   "from-fuchsia-500 to-fuchsia-800",
 ];
 
-const PAGE_SIZE = 10;
-
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -68,13 +66,12 @@ function buildShuffledGroups(items: TemplateItem[]): Group[] {
 }
 
 /**
- * Dashboard "Marketplace" preview -- categories and their products, same
+ * Dashboard "Marketplace" preview -- every category and product, same
  * visual pattern as the full Marketplace page, but shuffled into a random
  * order (both which categories show first and which products within each)
  * rather than the alphabetical/most-recent order the full page uses.
- * Capped to PAGE_SIZE products total across categories. Tapping a product
- * opens a checkout confirmation right here on the dashboard; "See all"
- * still goes to the full Marketplace page to browse everything.
+ * Tapping a product opens a checkout confirmation right here on the
+ * dashboard; "See all" still links to the full Marketplace page.
  */
 export default function ProductsSection({ templates }: { templates: TemplateItem[] }) {
   // Shuffle once on mount, not on every render/search keystroke.
@@ -87,22 +84,17 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
 
   const groups = useMemo(() => {
     const q = search.trim().toLowerCase();
+    if (!q) return baseGroups;
     const result: Group[] = [];
-    let count = 0;
     for (const g of baseGroups) {
-      if (count >= PAGE_SIZE) break;
-      const filtered = q
-        ? g.items.filter(
-            (t) =>
-              t.name.toLowerCase().includes(q) ||
-              (t.description ?? "").toLowerCase().includes(q) ||
-              g.categoryName.toLowerCase().includes(q)
-          )
-        : g.items;
+      const filtered = g.items.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          (t.description ?? "").toLowerCase().includes(q) ||
+          g.categoryName.toLowerCase().includes(q)
+      );
       if (filtered.length === 0) continue;
-      const sliced = filtered.slice(0, PAGE_SIZE - count);
-      result.push({ ...g, items: sliced });
-      count += sliced.length;
+      result.push({ ...g, items: filtered });
     }
     return result;
   }, [baseGroups, search]);
