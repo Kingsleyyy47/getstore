@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { formatNaira, type DeliveredCredentials } from "@/lib/types";
 import { IconStore, IconSearch, IconBox } from "@/components/icons";
@@ -47,7 +47,7 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function buildShuffledGroups(items: TemplateItem[]): Group[] {
+function groupByCategory(items: TemplateItem[]): Group[] {
   const map = new Map<string, Group>();
   for (const t of items) {
     const key = t.categoryId ?? "__uncategorized";
@@ -61,7 +61,11 @@ function buildShuffledGroups(items: TemplateItem[]): Group[] {
     }
     map.get(key)!.items.push(t);
   }
-  const groups = Array.from(map.values()).map((g) => ({ ...g, items: shuffle(g.items) }));
+  return Array.from(map.values());
+}
+
+function buildShuffledGroups(items: TemplateItem[]): Group[] {
+  const groups = groupByCategory(items).map((g) => ({ ...g, items: shuffle(g.items) }));
   return shuffle(groups);
 }
 
@@ -74,8 +78,19 @@ function buildShuffledGroups(items: TemplateItem[]): Group[] {
  * dashboard; "See all" still links to the full Marketplace page.
  */
 export default function ProductsSection({ templates }: { templates: TemplateItem[] }) {
-  // Shuffle once on mount, not on every render/search keystroke.
-  const [baseGroups, setBaseGroups] = useState<Group[]>(() => buildShuffledGroups(templates));
+  // Start with the deterministic (unshuffled) grouping -- this is what
+  // both the server render and the client's first render produce, so they
+  // match. Math.random() can't run here: if the initial render shuffled
+  // directly, the server and the client would each roll a different order
+  // and React would throw a hydration mismatch error as soon as the page
+  // loads. The actual shuffle happens client-only, once, right after mount
+  // (see the effect below), which is safe since it happens after hydration
+  // has already reconciled against the server's markup.
+  const [baseGroups, setBaseGroups] = useState<Group[]>(() => groupByCategory(templates));
+  useEffect(() => {
+    setBaseGroups(buildShuffledGroups(templates));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [search, setSearch] = useState("");
   const [checkoutItem, setCheckoutItem] = useState<TemplateItem | null>(null);
   const [buying, setBuying] = useState(false);
@@ -237,9 +252,24 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
                       )}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1">
-                      <span className="badge bg-emerald-500/15 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                        {t.available_count === 0 ? "Sold out" : `${t.available_count} pcs.`}
+                      {/* Piece count always shows (same as the full
+                          Marketplace page), even at 0 -- "Sold out" is a
+                          separate badge, not a replacement for it, so the
+                          exact stock number is never hidden. */}
+                      <span
+                        className={`badge text-[10px] font-semibold ${
+                          t.available_count === 0
+                            ? "bg-red-500/15 text-red-600 dark:text-red-400"
+                            : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        }`}
+                      >
+                        {t.available_count} pcs.
                       </span>
+                      {t.available_count === 0 && (
+                        <span className="badge bg-red-500/15 text-[10px] font-semibold text-red-600 dark:text-red-400">
+                          Sold out
+                        </span>
+                      )}
                       <span className="badge bg-black/10 text-[10px] font-mono font-semibold text-[var(--text)] dark:bg-white/10">
                         {formatNaira(t.price_cents)}
                       </span>
