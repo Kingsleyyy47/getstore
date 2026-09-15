@@ -25,7 +25,7 @@ export default async function OrderDetailsPage({ params }: { params: { id: strin
   const { data: item } = await admin
     .from("product_stock_items")
     .select(
-      "email, username, password, email_password, two_fa, recovery_email, recovery_email_password, extra_field_1, extra_field_2"
+      "email, username, password, email_password, two_fa, recovery_email, recovery_email_password, extra_field_1, extra_field_2, link"
     )
     .eq("id", order.stock_item_id)
     .single();

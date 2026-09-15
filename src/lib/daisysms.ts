@@ -9,7 +9,15 @@ import "server-only";
 const BASE_URL = process.env.DAISYSMS_BASE_URL ?? "https://daisysms.io/stubs/handler_api.php";
 
 export class DaisySMSError extends Error {
-  constructor(message: string, public raw?: string) {
+  /**
+   * True for errors that are genuinely about the CUSTOMER's request (price
+   * too low, nothing in stock right now, too many active rentals) -- safe
+   * to show them verbatim. False (default) for technical/infra failures
+   * (blocked by Cloudflare, bad API key, unexpected response shape) that
+   * should never reach a customer -- those get logged to Admin ->
+   * Notifications instead and the customer sees a generic message.
+   */
+  constructor(message: string, public raw?: string, public customerSafe = false) {
     super(message);
     this.name = "DaisySMSError";
   }
@@ -27,8 +35,33 @@ async function call(params: Record<string, string | number | undefined>) {
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined) url.searchParams.set(k, String(v));
   }
-  const res = await fetch(url.toString(), { cache: "no-store" });
+  // Server-side fetch from a serverless function sends no User-Agent (or a
+  // bare "node" one) by default, which some sites' Cloudflare bot
+  // protection flags and answers with an HTML "Just a moment..." challenge
+  // page instead of the real API response -- a real browser-like header
+  // set avoids that for anything short of a full JS challenge.
+  const res = await fetch(url.toString(), {
+    cache: "no-store",
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      Accept: "*/*",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+  });
   const body = (await res.text()).trim();
+
+  // If Cloudflare (or similar) intercepted the request with a challenge
+  // page, the body is HTML, not the plain "KEY:VALUE" or JSON text every
+  // DaisySMS endpoint actually returns -- surface that clearly instead of
+  // letting callers choke on it as if it were a normal API response.
+  if (body.startsWith("<!DOCTYPE") || body.startsWith("<html")) {
+    throw new DaisySMSError(
+      "DaisySMS's API is currently blocking this request behind a security check (Cloudflare) instead of returning data. This isn't something a header change can always fix from our side -- if it keeps happening, DaisySMS support may need to allowlist this server. Try again shortly.",
+      body.slice(0, 300)
+    );
+  }
+
   return { body, headers: res.headers };
 }
 
@@ -77,13 +110,16 @@ export async function getNumber(opts: {
 }
 
 function raiseForCommonErrors(body: string) {
+  // Technical/config issues -- not the customer's fault, not customer-safe.
   if (body === "BAD_KEY") throw new DaisySMSError("Invalid DaisySMS API key", body);
-  if (body === "MAX_PRICE_EXCEEDED")
-    throw new DaisySMSError("Current price exceeds the max price", body);
-  if (body === "NO_NUMBERS") throw new DaisySMSError("No numbers available", body);
-  if (body === "TOO_MANY_ACTIVE_RENTALS")
-    throw new DaisySMSError("Too many active rentals; finish some before renting more", body);
   if (body === "NO_MONEY") throw new DaisySMSError("Insufficient DaisySMS platform balance", body);
+
+  // Genuinely about this customer's request -- fine to show verbatim.
+  if (body === "MAX_PRICE_EXCEEDED")
+    throw new DaisySMSError("Current price exceeds the max price", body, true);
+  if (body === "NO_NUMBERS") throw new DaisySMSError("No numbers available", body, true);
+  if (body === "TOO_MANY_ACTIVE_RENTALS")
+    throw new DaisySMSError("Too many active rentals; finish some before renting more", body, true);
 }
 
 export type StatusResult =

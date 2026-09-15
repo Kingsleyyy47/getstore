@@ -34,6 +34,7 @@ const adminItems: SidebarItem[] = [
   { href: "/admin/pricing/all-countries", label: "All Countries Pricing", icon: <IconPercent /> },
   { href: "/admin/pricing/us-only", label: "US Only Pricing", icon: <IconPercent /> },
   { href: "/admin/announcements", label: "Announcements", icon: <IconBell /> },
+  { href: "/admin/notifications", label: "Notifications", icon: <IconBell /> },
   { href: "/admin/roles", label: "Roles", icon: <IconShield /> },
   { href: "/admin/support", label: "Support", icon: <IconMessage /> },
   { href: "/admin/settings", label: "Settings", icon: <IconSettings /> },

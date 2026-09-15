@@ -126,6 +126,7 @@ export interface DeliveredCredentials {
   recovery_email_password: string | null;
   extra_field_1: string | null;
   extra_field_2: string | null;
+  link: string | null;
 }
 
 /** Format cents as a dollar string, e.g. 1050 -> "$10.50" */

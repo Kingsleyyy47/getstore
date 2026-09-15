@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/settings";
 import { getServicePriceRow, computeEffectivePriceCents } from "@/lib/pricing";
+import { notifyAdmin } from "@/lib/adminNotifications";
 import * as daisysms from "@/lib/daisysms";
 
 const MARKUP_PERCENT = Number(process.env.MARKUP_PERCENT ?? "0");
@@ -65,8 +66,25 @@ export async function POST(req: Request) {
   try {
     rental = await daisysms.getNumber({ service, maxPriceDollars: effectiveMaxPrice });
   } catch (e) {
-    const message = e instanceof daisysms.DaisySMSError ? e.message : "Failed to rent a number";
-    return NextResponse.json({ error: message }, { status: 502 });
+    // Business-logic errors (price too low, nothing in stock, too many
+    // active rentals) are genuinely about this request -- safe to show
+    // as-is. Anything else (blocked by Cloudflare, bad API key, an
+    // unexpected response shape) is a provider/technical issue: log it for
+    // admins instead and tell the customer something generic.
+    if (e instanceof daisysms.DaisySMSError && e.customerSafe) {
+      return NextResponse.json({ error: e.message }, { status: 502 });
+    }
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    await notifyAdmin({
+      type: "provider_error",
+      title: "USA & Canada (DaisySMS) rental failed",
+      message: detail,
+      meta: { service },
+    });
+    return NextResponse.json(
+      { error: "Couldn't rent a number right now. Please try again shortly." },
+      { status: 502 }
+    );
   }
 
   const basePriceDollars = rental.priceDollars ?? effectiveMaxPrice;

@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { parseCsv, parseTxtCombo, DEFAULT_TXT_FIELD_ORDER } from "@/lib/csv";
+import {
+  parseCsv,
+  parseTxtCombo,
+  DEFAULT_TXT_FIELD_ORDER,
+  resolveCsvColumns,
+  promoteTxtLinkField,
+} from "@/lib/csv";
 import Modal from "@/components/Modal";
 
 interface Template {
@@ -81,40 +87,15 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
     recovery_email_password: "Recovery email password",
     field_1: field1Label,
     field_2: field2Label,
+    link: "Link",
   };
 
-  function resolveCsvHeader(header: string, labels: Record<string, string>): { key: string; label: string } | null {
-    switch (header.trim().toLowerCase()) {
-      case "password":
-        return { key: "password", label: labels.password };
-      case "email":
-        return { key: "email", label: labels.email };
-      case "username":
-        return { key: "username", label: labels.username };
-      case "email_password":
-        return { key: "email_password", label: labels.email_password };
-      case "two_fa":
-      case "two_fa_code":
-        return { key: "two_fa", label: labels.two_fa };
-      case "recovery_email":
-        return { key: "recovery_email", label: labels.recovery_email };
-      case "recovery_email_password":
-        return { key: "recovery_email_password", label: labels.recovery_email_password };
-      case "field_1":
-      case "extra_field_1":
-        return { key: "field_1", label: labels.field_1 };
-      case "field_2":
-      case "extra_field_2":
-        return { key: "field_2", label: labels.field_2 };
-      default:
-        return null;
-    }
-  }
-
   // Reads the file client-side and auto-detects how it'll be parsed --
-  // CSV columns mapped to known fields, or (for TXT combo lists) the
-  // delimiter and positional field order -- so the admin can confirm it
-  // before anything actually gets uploaded.
+  // CSV columns mapped to known fields (auto-detecting anything else,
+  // including a link column, instead of assuming a fixed category's field
+  // set -- see resolveCsvColumns in src/lib/csv.ts), or (for TXT combo
+  // lists) the delimiter and positional field order -- so the admin can
+  // confirm it before anything actually gets uploaded.
   async function analyzeAndOpenPreview(f: File, tmpl: Template | null = selectedTemplate) {
     setAnalyzing(true);
     setError(null);
@@ -128,11 +109,12 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
       };
 
       if (isTxt) {
-        const fieldOrder =
+        const rawFieldOrder =
           tmpl?.bulk_format_fields && tmpl.bulk_format_fields.length > 0
             ? tmpl.bulk_format_fields
             : DEFAULT_TXT_FIELD_ORDER;
-        const rows = parseTxtCombo(text, fieldOrder);
+        const rawRows = parseTxtCombo(text, rawFieldOrder);
+        const { rows, fieldOrder } = promoteTxtLinkField(rawRows, rawFieldOrder);
         const lines = text
           .split(/\r\n|\r|\n/)
           .map((l) => l.trim())
@@ -159,19 +141,19 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
       } else {
         const rows = parseCsv(text);
         const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
-        const columns: CsvPreviewColumn[] = [];
-        const unrecognized: string[] = [];
-        const seen = new Set<string>();
+        const { columns: resolved, unrecognized } = resolveCsvColumns(headers, rows);
 
-        for (const h of headers) {
-          const resolved = resolveCsvHeader(h, labels);
-          if (resolved && !seen.has(resolved.key)) {
-            columns.push({ ...resolved, header: h });
-            seen.add(resolved.key);
-          } else if (!resolved) {
-            unrecognized.push(h);
-          }
-        }
+        // Known field_1/field_2 slots use the admin's configured label for
+        // that template when set (e.g. "Year"); an auto-detected column
+        // (one that wasn't literally named "field_1"/"field_2") keeps the
+        // label taken from the file's own header text instead, since
+        // that's more informative than a generic slot name.
+        const columns: CsvPreviewColumn[] = resolved.map((c) => {
+          if (c.key === "field_1" && tmpl?.field_1_label) return { ...c, label: tmpl.field_1_label };
+          if (c.key === "field_2" && tmpl?.field_2_label) return { ...c, label: tmpl.field_2_label };
+          return c;
+        });
+        const seen = new Set(columns.map((c) => c.key));
 
         const missing: string[] = [];
         if (!seen.has("password")) missing.push("password");
@@ -503,11 +485,23 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
                 primary identifier)
               </li>
               <li>
+                <code className="text-[var(--text)]">link</code> or{" "}
+                <code className="text-[var(--text)]">url</code> - A login link, auto-detected and
+                shown to the buyer as a clickable link
+              </li>
+              <li>
                 <code className="text-[var(--text)]">field_1</code>,{" "}
                 <code className="text-[var(--text)]">field_2</code> - Free-form extra info (PIN,
-                linked phone number, backup codes, etc.)
+                linked phone number, backup codes, a cookie, etc.)
               </li>
             </ul>
+            <p className="mt-2 text-[var(--text-muted)]">
+              Any other column name is fine too — it's read automatically, no fixed set of columns
+              or product category required. If its values are all real links they're treated as the{" "}
+              <code className="text-[var(--text)]">link</code> field even without that exact header
+              name; otherwise it fills the next open extra-info slot labeled with its own column
+              name. The same auto-detection applies to a TXT combo list's extra positions.
+            </p>
           </div>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSettings } from "@/lib/settings";
 import { getFavoriteServices } from "@/lib/favorites";
 import { getServicePriceMap, computeEffectivePriceCents } from "@/lib/pricing";
+import { notifyAdmin } from "@/lib/adminNotifications";
 import * as daisysms from "@/lib/daisysms";
 
 /**
@@ -40,7 +41,18 @@ export async function GET() {
       .sort((a, b) => Number(b.is_favorite) - Number(a.is_favorite));
     return NextResponse.json({ services });
   } catch (e) {
-    const message = e instanceof daisysms.DaisySMSError ? e.message : "Failed to load services";
-    return NextResponse.json({ error: message }, { status: 502 });
+    // Loading the catalog has no per-customer meaning -- any failure here
+    // is a provider/technical issue, never something the customer caused.
+    // Log it for admins and show the customer a plain, generic message.
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    await notifyAdmin({
+      type: "provider_error",
+      title: "USA & Canada (DaisySMS) service list failed to load",
+      message: detail,
+    });
+    return NextResponse.json(
+      { error: "USA & Canada numbers aren't available right now. Please try again shortly." },
+      { status: 502 }
+    );
   }
 }

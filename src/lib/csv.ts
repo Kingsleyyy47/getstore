@@ -128,3 +128,188 @@ export function parseTxtCombo(
     return obj;
   });
 }
+
+/**
+ * Strict URL detector used to auto-detect a "link" field in bulk uploads
+ * and customer credential displays. Deliberately strict -- a real http(s)
+ * URL (validated with the URL constructor), a hostname with an actual dot
+ * in it, no whitespace, and a sane length cap -- so a long opaque token
+ * like a session cookie, which can run to hundreds of characters but isn't
+ * a URL, never gets mistaken for a link just because it's long.
+ */
+export function isLikelyUrl(value: string): boolean {
+  const v = value.trim();
+  if (!v || v.length > 2048) return false;
+  if (/\s/.test(v)) return false;
+  if (!/^https?:\/\//i.test(v)) return false;
+  try {
+    const url = new URL(v);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    if (!url.hostname.includes(".")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The stock-item columns a CSV/TXT field can resolve to. "field_1"/"field_2"
+ * are the two generic slots (product_stock_items.extra_field_1/2); "link" is
+ * its own dedicated column since it's common across every product category
+ * and gets special (clickable) treatment when shown to the buyer. */
+export type ResolvedFieldKey =
+  | "email"
+  | "username"
+  | "password"
+  | "email_password"
+  | "two_fa"
+  | "recovery_email"
+  | "recovery_email_password"
+  | "field_1"
+  | "field_2"
+  | "link";
+
+export const FIELD_DISPLAY_LABELS: Record<ResolvedFieldKey, string> = {
+  email: "Email",
+  username: "Username",
+  password: "Password",
+  email_password: "Email password",
+  two_fa: "2FA code",
+  recovery_email: "Recovery email",
+  recovery_email_password: "Recovery email password",
+  field_1: "field_1",
+  field_2: "field_2",
+  link: "Link",
+};
+
+/** CSV header names that map directly to a known column, regardless of
+ * product category -- these are generic account-credential terms, not tied
+ * to any one platform's field set. */
+const KNOWN_HEADER_MAP: Record<string, ResolvedFieldKey> = {
+  password: "password",
+  email: "email",
+  username: "username",
+  email_password: "email_password",
+  two_fa: "two_fa",
+  two_fa_code: "two_fa",
+  recovery_email: "recovery_email",
+  recovery_email_password: "recovery_email_password",
+  field_1: "field_1",
+  extra_field_1: "field_1",
+  field_2: "field_2",
+  extra_field_2: "field_2",
+  link: "link",
+  url: "link",
+  login_link: "link",
+  login_url: "link",
+  account_link: "link",
+  cookie_link: "link",
+};
+
+/** Turns a raw header like "backup_code" or "PIN Number" into "Backup code"
+ * / "Pin Number" -- used as the auto-detected label for a column that isn't
+ * one of the known field names, so it isn't shown to the admin as a bare
+ * "field_1"/"field_2" but as whatever the file itself called it. */
+function humanizeHeader(h: string): string {
+  const words = h
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!words) return h;
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export interface ResolvedCsvColumn {
+  key: ResolvedFieldKey;
+  header: string;
+  label: string;
+}
+
+/**
+ * Resolves a CSV's headers into product_stock_items columns WITHOUT
+ * assuming any particular product category's field set. Known credential
+ * terms (password, email, two_fa, link/url, ...) map directly; any other
+ * header is auto-detected instead of silently dropped: if its values in
+ * `rows` all look like real URLs (see isLikelyUrl) it's treated as the
+ * "link" field, otherwise it fills the next open generic slot (field_1,
+ * then field_2) using the header's own text as its label. Only once link
+ * and both generic slots are already taken does a further extra column get
+ * genuinely ignored -- product_stock_items has no more room to store it.
+ */
+export function resolveCsvColumns(
+  headers: string[],
+  rows: Record<string, string>[]
+): { columns: ResolvedCsvColumn[]; unrecognized: string[] } {
+  const columns: ResolvedCsvColumn[] = [];
+  const unrecognized: string[] = [];
+  const usedKeys = new Set<ResolvedFieldKey>();
+
+  // Pass 1: exact known header names (case-insensitive), first match wins
+  // if a file somehow has two headers that map to the same column.
+  for (const h of headers) {
+    const known = KNOWN_HEADER_MAP[h.trim().toLowerCase()];
+    if (known && !usedKeys.has(known)) {
+      columns.push({ key: known, header: h, label: FIELD_DISPLAY_LABELS[known] });
+      usedKeys.add(known);
+    }
+  }
+
+  // Pass 2: auto-detect everything else.
+  const genericSlots: ResolvedFieldKey[] = ["field_1", "field_2"];
+  for (const h of headers) {
+    const key = h.trim().toLowerCase();
+    if (KNOWN_HEADER_MAP[key]) continue; // handled in pass 1 (or a dupe of one)
+
+    const values = rows.map((r) => r[key] ?? "").filter((v) => v.trim() !== "");
+    const looksLikeLink = values.length > 0 && values.every((v) => isLikelyUrl(v));
+
+    if (looksLikeLink && !usedKeys.has("link")) {
+      columns.push({ key: "link", header: h, label: "Link" });
+      usedKeys.add("link");
+      continue;
+    }
+
+    const slot = genericSlots.find((s) => !usedKeys.has(s));
+    if (slot) {
+      columns.push({ key: slot, header: h, label: humanizeHeader(h) });
+      usedKeys.add(slot);
+    } else {
+      unrecognized.push(h);
+    }
+  }
+
+  return { columns, unrecognized };
+}
+
+/**
+ * TXT combo lists are positional, so there's no header name to read a
+ * "link" column from -- but if every non-blank value that landed in one of
+ * the generic field_1/field_2 slots looks like a real URL, it's promoted to
+ * the dedicated "link" column instead, the same as an auto-detected CSV
+ * column would be. Only one slot is promoted (product_stock_items has a
+ * single link column) -- field_1 is checked before field_2.
+ */
+export function promoteTxtLinkField(
+  rows: Record<string, string>[],
+  fieldOrder: readonly string[]
+): { rows: Record<string, string>[]; fieldOrder: string[]; promoted: string | null } {
+  if (fieldOrder.includes("link")) {
+    // Admin already put "link" explicitly in the format -- nothing to promote.
+    return { rows, fieldOrder: [...fieldOrder], promoted: null };
+  }
+
+  for (const slot of ["field_1", "field_2"]) {
+    if (!fieldOrder.includes(slot)) continue;
+    const values = rows.map((r) => r[slot]).filter((v) => v && v.trim() !== "");
+    if (values.length > 0 && values.every((v) => isLikelyUrl(v))) {
+      const newFieldOrder = fieldOrder.map((f) => (f === slot ? "link" : f));
+      const newRows = rows.map((r) => {
+        const { [slot]: moved, ...rest } = r;
+        return { ...rest, link: moved ?? "" };
+      });
+      return { rows: newRows, fieldOrder: newFieldOrder, promoted: slot };
+    }
+  }
+
+  return { rows, fieldOrder: [...fieldOrder], promoted: null };
+}

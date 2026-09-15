@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { formatNaira } from "@/lib/types";
+import { isLikelyUrl } from "@/lib/csv";
 import {
   IconArrowLeft,
   IconCopy,
@@ -22,11 +23,17 @@ interface Credentials {
   recovery_email_password: string | null;
   extra_field_1: string | null;
   extra_field_2: string | null;
+  link: string | null;
 }
 
 interface Field {
   label: string;
   value: string;
+  /** True when this value is a real link (auto-detected -- see isLikelyUrl
+   * in src/lib/csv.ts, which is deliberately strict so a long opaque
+   * session cookie never gets rendered as a clickable link just because
+   * it's long). Shown as a clickable "open" link instead of plain text. */
+  isLink: boolean;
 }
 
 export default function OrderDetailsView({
@@ -51,18 +58,41 @@ export default function OrderDetailsView({
   field2Label?: string | null;
 }) {
   const fields: Field[] = [];
-  if (credentials.email) fields.push({ label: "Email", value: credentials.email });
-  if (credentials.username) fields.push({ label: "Username", value: credentials.username });
-  fields.push({ label: "Password", value: credentials.password });
-  if (credentials.email_password) fields.push({ label: "Email Password", value: credentials.email_password });
-  if (credentials.two_fa) fields.push({ label: "2FA Code", value: credentials.two_fa });
-  if (credentials.recovery_email) fields.push({ label: "Recovery Email", value: credentials.recovery_email });
+  if (credentials.email) fields.push({ label: "Email", value: credentials.email, isLink: false });
+  if (credentials.username) fields.push({ label: "Username", value: credentials.username, isLink: false });
+  fields.push({ label: "Password", value: credentials.password, isLink: false });
+  if (credentials.email_password)
+    fields.push({ label: "Email Password", value: credentials.email_password, isLink: false });
+  if (credentials.two_fa) fields.push({ label: "2FA Code", value: credentials.two_fa, isLink: false });
+  if (credentials.recovery_email)
+    fields.push({ label: "Recovery Email", value: credentials.recovery_email, isLink: false });
   if (credentials.recovery_email_password)
-    fields.push({ label: "Recovery Email Password", value: credentials.recovery_email_password });
+    fields.push({
+      label: "Recovery Email Password",
+      value: credentials.recovery_email_password,
+      isLink: false,
+    });
+  // extra_field_1/2 are free-form (admin-labeled) text, but if a value in
+  // one genuinely looks like a real URL (auto-detected, not just "long" --
+  // see isLikelyUrl), it's still shown as clickable rather than as an inert
+  // wall of text. A long opaque token like a session cookie fails this
+  // check and is correctly left as plain text.
   if (credentials.extra_field_1)
-    fields.push({ label: field1Label || "Extra Info", value: credentials.extra_field_1 });
+    fields.push({
+      label: field1Label || "Extra Info",
+      value: credentials.extra_field_1,
+      isLink: isLikelyUrl(credentials.extra_field_1),
+    });
   if (credentials.extra_field_2)
-    fields.push({ label: field2Label || "Extra Info 2", value: credentials.extra_field_2 });
+    fields.push({
+      label: field2Label || "Extra Info 2",
+      value: credentials.extra_field_2,
+      isLink: isLikelyUrl(credentials.extra_field_2),
+    });
+  // The dedicated, auto-detected link field -- always shown last and always
+  // clickable, labeled clearly as what it's for (logging in), so it can't
+  // be mistaken for one of the opaque extra fields above.
+  if (credentials.link) fields.push({ label: "Login Link", value: credentials.link, isLink: true });
 
   const allText = fields.map((f) => `${f.label}: ${f.value}`).join("\n");
 
@@ -114,7 +144,7 @@ export default function OrderDetailsView({
         </h2>
         <div className="card divide-y divide-[var(--border)]">
           {fields.map((f) => (
-            <FieldRow key={f.label} label={f.label} value={f.value} />
+            <FieldRow key={f.label} label={f.label} value={f.value} isLink={f.isLink} />
           ))}
         </div>
       </div>
@@ -131,7 +161,7 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FieldRow({ label, value }: { label: string; value: string }) {
+function FieldRow({ label, value, isLink }: { label: string; value: string; isLink: boolean }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -148,7 +178,19 @@ function FieldRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm sm:px-5">
       <div className="min-w-0">
         <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</div>
-        <div className="mt-0.5 break-all font-mono">{value}</div>
+        {isLink ? (
+          <a
+            href={value}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-0.5 flex items-center gap-1 break-all font-mono text-brand hover:underline"
+          >
+            {value}
+            <IconExternalLink size={14} />
+          </a>
+        ) : (
+          <div className="mt-0.5 break-all font-mono">{value}</div>
+        )}
       </div>
       <button
         type="button"

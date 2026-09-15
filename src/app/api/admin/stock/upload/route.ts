@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parseCsv, parseTxtCombo, DEFAULT_TXT_FIELD_ORDER } from "@/lib/csv";
+import {
+  parseCsv,
+  parseTxtCombo,
+  DEFAULT_TXT_FIELD_ORDER,
+  resolveCsvColumns,
+  promoteTxtLinkField,
+} from "@/lib/csv";
 
 interface RowError {
   row: number;
@@ -52,16 +58,46 @@ export async function POST(req: Request) {
     Array.isArray(template.bulk_format_fields) && template.bulk_format_fields.length > 0
       ? template.bulk_format_fields
       : DEFAULT_TXT_FIELD_ORDER;
-  const rows = isTxt ? parseTxtCombo(text, fieldOrder) : parseCsv(text);
 
-  if (rows.length === 0) {
+  // Normalize both formats down to the same canonical keys
+  // (email/username/password/.../field_1/field_2/link) before validating
+  // rows, so the loop below doesn't need to know which format it came from.
+  //
+  // CSV: headers are resolved without assuming any particular product
+  // category's field set -- known credential terms map directly, and any
+  // other column is auto-detected (a "link" if its values look like real
+  // URLs, otherwise the next open generic slot) instead of being dropped.
+  // See resolveCsvColumns in src/lib/csv.ts.
+  //
+  // TXT: positional, so there's no header to auto-detect from, but if a
+  // generic field_1/field_2 slot's values all look like real URLs it gets
+  // promoted to the dedicated link column the same way. See
+  // promoteTxtLinkField in src/lib/csv.ts.
+  let normalizedRows: Record<string, string>[];
+  if (isTxt) {
+    const parsed = parseTxtCombo(text, fieldOrder);
+    normalizedRows = promoteTxtLinkField(parsed, fieldOrder).rows;
+  } else {
+    const parsed = parseCsv(text);
+    const headers = parsed.length > 0 ? Object.keys(parsed[0]) : [];
+    const { columns } = resolveCsvColumns(headers, parsed);
+    normalizedRows = parsed.map((r) => {
+      const obj: Record<string, string> = {};
+      for (const c of columns) {
+        obj[c.key] = r[c.header] ?? "";
+      }
+      return obj;
+    });
+  }
+
+  if (normalizedRows.length === 0) {
     return NextResponse.json({ error: "File has no data rows" }, { status: 400 });
   }
 
   const errors: RowError[] = [];
   const validRows: Record<string, string | null>[] = [];
 
-  rows.forEach((row, index) => {
+  normalizedRows.forEach((row, index) => {
     // CSV rows are 1-indexed after a header row; TXT combo lists have no
     // header, so line 1 is the first account.
     const rowNum = index + (isTxt ? 1 : 2);
@@ -69,11 +105,12 @@ export async function POST(req: Request) {
     const email = row["email"]?.trim() || null;
     const username = row["username"]?.trim() || null;
     const emailPassword = row["email_password"]?.trim() || null;
-    const twoFa = (row["two_fa"] || row["two_fa_code"])?.trim() || null;
+    const twoFa = row["two_fa"]?.trim() || null;
     const recoveryEmail = row["recovery_email"]?.trim() || null;
     const recoveryEmailPassword = row["recovery_email_password"]?.trim() || null;
-    const field1 = (row["field_1"] || row["extra_field_1"])?.trim() || null;
-    const field2 = (row["field_2"] || row["extra_field_2"])?.trim() || null;
+    const field1 = row["field_1"]?.trim() || null;
+    const field2 = row["field_2"]?.trim() || null;
+    const link = row["link"]?.trim() || null;
 
     if (!password) {
       errors.push({ row: rowNum, reason: "Missing password" });
@@ -95,6 +132,7 @@ export async function POST(req: Request) {
       recovery_email_password: recoveryEmailPassword,
       extra_field_1: field1,
       extra_field_2: field2,
+      link,
       created_by: user.id,
     });
   });

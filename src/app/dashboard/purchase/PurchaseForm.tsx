@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatNaira, type Rental } from "@/lib/types";
 import NeedHelp from "@/components/NeedHelp";
+import { IconCopy, IconCheck } from "@/components/icons";
 
 type Phase = "idle" | "renting" | "waiting" | "done" | "error";
 
@@ -32,8 +33,11 @@ export default function PurchaseForm({
   const [loadingServices, setLoadingServices] = useState(true);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [service, setService] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
+  // The service code currently being rented or shown in the inline
+  // collapse -- while a purchase is in flight this is set immediately
+  // (so the tapped row can show a spinner), then stays in sync with
+  // rental.service once the rental comes back from the server.
+  const [pendingCode, setPendingCode] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [rental, setRental] = useState<Rental | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,22 +64,16 @@ export default function PurchaseForm({
     })();
   }, []);
 
-  // Keep the currently selected service visible even if it doesn't match
-  // the search text, so picking one doesn't make the list look empty.
+  // The code of the row the inline collapse belongs to -- keep it visible
+  // even if it doesn't match the current search text, so buying one
+  // doesn't make its own result appear to vanish.
+  const activeCode = rental?.service ?? pendingCode;
+
   const filteredServices = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return services;
-    return services.filter((s) => s.code === service || s.name.toLowerCase().includes(q));
-  }, [services, search, service]);
-
-  // When a service is picked, default the price cap to the price shown in
-  // the list so the customer is never charged more than what they saw --
-  // still editable if they want a tighter cap.
-  function pickService(code: string) {
-    setService(code);
-    const found = services.find((s) => s.code === code);
-    if (found) setMaxPrice((found.naira_cents / 100).toString());
-  }
+    return services.filter((s) => s.code === activeCode || s.name.toLowerCase().includes(q));
+  }, [services, search, activeCode]);
 
   useEffect(() => {
     return () => {
@@ -84,16 +82,16 @@ export default function PurchaseForm({
     };
   }, []);
 
-  // Drives the "you can cancel in Xs" countdown below -- ticks once a
-  // second only while there's a rental waiting on a code.
+  // Drives the countdown/elapsed timer in the collapse -- ticks once a
+  // second whenever there's a rental in play.
   useEffect(() => {
-    if (rental?.status === "waiting") {
+    if (rental) {
       tickRef.current = setInterval(() => setNow(Date.now()), 1000);
       return () => {
         if (tickRef.current) clearInterval(tickRef.current);
       };
     }
-  }, [rental?.status]);
+  }, [rental]);
 
   // Customers can cancel & refund 3 minutes after renting if no code has
   // arrived; if nobody cancels, it's auto-cancelled and refunded after 7
@@ -102,18 +100,25 @@ export default function PurchaseForm({
   const cancellableInMs = rental
     ? Math.max(0, new Date(rental.created_at).getTime() + 3 * 60 * 1000 - now)
     : 0;
+  const elapsedMs = rental ? Math.max(0, now - new Date(rental.created_at).getTime()) : 0;
 
-  async function rent(e: React.FormEvent) {
-    e.preventDefault();
+  // Tapping a service buys it immediately -- no separate "confirm" step.
+  // The price cap is set to whatever price was shown for that service at
+  // the moment of the tap, so the customer is never charged more than what
+  // they saw.
+  async function buyService(s: Service) {
+    if (phase === "renting" || (rental && rental.status === "waiting")) return;
+    setPendingCode(s.code);
     setError(null);
+    setExtraInfo(null);
     setPhase("renting");
 
     const res = await fetch("/api/daisysms/rent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        service,
-        maxPriceNaira: maxPrice ? Number(maxPrice) : undefined,
+        service: s.code,
+        maxPriceNaira: s.naira_cents / 100,
       }),
     });
     const json = await res.json();
@@ -171,8 +176,10 @@ export default function PurchaseForm({
     }
   }
 
-  function reset() {
+  function closeCollapse() {
+    if (pollRef.current) clearInterval(pollRef.current);
     setRental(null);
+    setPendingCode(null);
     setError(null);
     setExtraInfo(null);
     setPhase("idle");
@@ -216,82 +223,93 @@ export default function PurchaseForm({
     startPolling(json.rental.id);
   }
 
-  if (rental) {
-    return (
-      <div className="card space-y-4 p-6">
-        <div>
-          <div className="text-sm text-[var(--text-muted)]">Rented number</div>
-          <div className="text-xl font-bold">+{rental.phone}</div>
-          <div className="text-sm text-[var(--text-muted)]">
-            {rental.service} &middot; charged {formatNaira(rental.price_cents)}
+  // Renders the inline panel that opens directly under whichever service
+  // row was tapped -- the number and (once it arrives) the code, each
+  // copyable, plus a live timer instead of replacing the whole list with a
+  // separate "rental" screen.
+  function renderCollapse() {
+    if (!rental) {
+      // Rental failed outright (e.g. out of stock, price changed) -- no
+      // number/code to show yet, just the error and a way to dismiss it.
+      if (phase === "error" && error) {
+        return (
+          <div className="mt-2 space-y-3 rounded-lg border border-red-500/30 bg-red-500/5 p-4">
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {error}
+            </div>
+            <button className="btn-ghost h-9 px-3 text-sm" onClick={closeCollapse}>
+              Close
+            </button>
           </div>
-        </div>
-
+        );
+      }
+      return null;
+    }
+    return (
+      <div className="mt-2 space-y-3 rounded-lg border border-brand/30 bg-brand/5 p-4">
+        {error && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {error}
+          </div>
+        )}
         {extraInfo && (
-          <div className="rounded-lg border border-[var(--border)] bg-black/5 px-4 py-3 text-sm text-[var(--text-muted)] dark:bg-white/5">
+          <div className="rounded-lg border border-[var(--border)] bg-black/5 px-3 py-2 text-sm text-[var(--text-muted)] dark:bg-white/5">
             {extraInfo}
           </div>
         )}
 
-        <NeedHelp whatsappUrl={whatsappUrl} telegramUrl={telegramUrl} />
+        <CopyRow label="Number" value={`+${rental.phone}`} />
 
-        <div className="rounded-lg border border-[var(--border)] p-4">
-          {rental.status === "waiting" && (
-            <p className="text-sm text-[var(--text-muted)]">
-              Waiting for SMS... (checking every 5s). We'll auto-cancel and refund this if no code
-              arrives within 7 minutes.
-            </p>
-          )}
-          {rental.status === "received" && (
-            <div>
-              <div className="text-sm text-[var(--text-muted)]">Code received:</div>
-              <div className="text-2xl font-extrabold">{rental.code}</div>
-              {rental.full_text && (
-                <div className="mt-2 text-sm text-[var(--text-muted)]">{rental.full_text}</div>
-              )}
-            </div>
-          )}
-          {rental.status === "cancelled" && (
-            <p className="text-sm text-red-300">Rental cancelled and refunded.</p>
-          )}
-          {rental.status === "done" && <p className="text-sm text-teal-300">Marked as done.</p>}
-        </div>
+        {rental.status === "waiting" && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
+            <span className="text-[var(--text-muted)]">Waiting for SMS...</span>
+            <span className="font-mono font-semibold text-[var(--text)]">{formatElapsed(elapsedMs)}</span>
+          </div>
+        )}
+        {rental.status === "received" && (
+          <>
+            <CopyRow label="Code" value={rental.code ?? ""} highlight />
+            {rental.full_text && (
+              <p className="text-sm text-[var(--text-muted)]">{rental.full_text}</p>
+            )}
+          </>
+        )}
+        {rental.status === "cancelled" && <p className="text-sm text-red-300">Rental cancelled and refunded.</p>}
+        {rental.status === "done" && rental.code && <CopyRow label="Code" value={rental.code} highlight />}
 
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2">
           {rental.status === "waiting" && (
-            <button className="btn-ghost" onClick={cancel} disabled={cancellableInMs > 0}>
+            <button className="btn-ghost h-9 px-3 text-sm" onClick={cancel} disabled={cancellableInMs > 0}>
               {cancellableInMs > 0
                 ? `Cancel in ${Math.ceil(cancellableInMs / 1000)}s`
                 : "Cancel & refund"}
             </button>
           )}
           {rental.status === "received" && (
-            <button className="btn-primary" onClick={markDone}>
+            <button className="btn-primary h-9 px-3 text-sm" onClick={markDone}>
               Mark done
             </button>
           )}
           {extraActivationEnabled && (rental.status === "received" || rental.status === "done") && (
-            <button className="btn-ghost" onClick={getAnotherCode} disabled={extraBusy}>
+            <button className="btn-ghost h-9 px-3 text-sm" onClick={getAnotherCode} disabled={extraBusy}>
               {extraBusy ? "Requesting..." : "Get another code"}
             </button>
           )}
-          <button className="btn-ghost" onClick={reset}>
-            Rent another number
+          <button className="btn-ghost h-9 px-3 text-sm" onClick={closeCollapse}>
+            Close
           </button>
         </div>
+
+        <NeedHelp whatsappUrl={whatsappUrl} telegramUrl={telegramUrl} />
       </div>
     );
   }
 
   return (
-    <form onSubmit={rent} className="card space-y-4 p-6">
-      {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-          {error}
-        </div>
-      )}
+    <div className="card space-y-4 p-6">
       <div>
         <div className="label">Service</div>
+        <p className="mb-2 text-xs text-[var(--text-muted)]">Tap a service to rent it instantly.</p>
         {!loadingServices && !servicesError && services.length > 0 && (
           <input
             className="input mb-2"
@@ -309,47 +327,80 @@ export default function PurchaseForm({
         {!loadingServices && !servicesError && services.length > 0 && filteredServices.length === 0 && (
           <p className="text-sm text-[var(--text-muted)]">No services match &quot;{search}&quot;.</p>
         )}
-        <div className="max-h-72 space-y-2 overflow-y-auto">
-          {filteredServices.map((s) => (
-            <label
-              key={s.code}
-              className={`flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm transition-colors ${
-                service === s.code ? "border-brand bg-brand/5" : "border-[var(--border)]"
-              }`}
-            >
-              <span className="flex items-center gap-2 truncate">
-                <input
-                  type="radio"
-                  name="service"
-                  checked={service === s.code}
-                  onChange={() => pickService(s.code)}
-                />
-                {s.is_favorite && <span className="text-amber-500">★</span>}
-                <span className="truncate">{s.name}</span>
-              </span>
-              <span className="font-bold text-[var(--text)]">{formatNaira(s.naira_cents)}</span>
-            </label>
-          ))}
+        <div className="max-h-[32rem] space-y-2 overflow-y-auto">
+          {filteredServices.map((s) => {
+            const isActive = s.code === activeCode;
+            const isPending = isActive && phase === "renting" && !rental;
+            return (
+              <div key={s.code}>
+                <button
+                  type="button"
+                  onClick={() => buyService(s)}
+                  disabled={phase === "renting" || Boolean(rental && rental.status === "waiting")}
+                  className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                    isActive ? "border-brand bg-brand/5" : "border-[var(--border)] hover:bg-black/5 dark:hover:bg-white/5"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    {s.is_favorite && <span className="text-amber-500">★</span>}
+                    <span className="truncate">{s.name}</span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-bold text-[var(--text)]">{formatNaira(s.naira_cents)}</span>
+                    {isPending && <span className="text-xs text-[var(--text-muted)]">Buying...</span>}
+                  </span>
+                </button>
+                {isActive && renderCollapse()}
+              </div>
+            );
+          })}
         </div>
       </div>
-      <div>
-        <label className="label" htmlFor="max_price">
-          Max price you'll pay, in ₦ (optional)
-        </label>
-        <input
-          className="input"
-          id="max_price"
-          type="number"
-          step="0.01"
-          min="0"
-          value={maxPrice}
-          onChange={(e) => setMaxPrice(e.target.value)}
-          placeholder="Leave blank to use your full balance as the cap"
-        />
+    </div>
+  );
+}
+
+/** mm:ss elapsed, e.g. 75000ms -> "1:15". */
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+/** A labeled value with its own copy-to-clipboard icon button, used for the
+ * number and code inside the buy collapse. */
+function CopyRow({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard API unavailable -- value is still visible to select/copy manually
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2">
+      <div className="min-w-0">
+        <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</div>
+        <div className={`mt-0.5 truncate font-mono ${highlight ? "text-lg font-extrabold" : "font-semibold"}`}>
+          {value || "—"}
+        </div>
       </div>
-      <button className="btn-primary w-full" type="submit" disabled={phase === "renting" || !service}>
-        {phase === "renting" ? "Renting..." : "Rent number"}
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={`Copy ${label}`}
+        disabled={!value}
+        className="shrink-0 rounded-lg p-2 text-[var(--text-muted)] hover:bg-black/5 hover:text-[var(--text)] disabled:opacity-40 dark:hover:bg-white/5"
+      >
+        {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
       </button>
-    </form>
+    </div>
   );
 }

@@ -28,6 +28,7 @@ const FIELD_LABELS: Record<string, string> = {
   email_password: "Mail password",
   recovery_email: "Recovery mail",
   two_fa: "2FA key",
+  link: "Link",
   field_1: "Field 1",
   field_2: "Field 2",
 };

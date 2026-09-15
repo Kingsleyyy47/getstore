@@ -32,7 +32,7 @@ export async function GET(req: Request) {
   const { data: item, error: itemErr } = await admin
     .from("product_stock_items")
     .select(
-      "email, username, password, email_password, two_fa, recovery_email, recovery_email_password, extra_field_1, extra_field_2"
+      "email, username, password, email_password, two_fa, recovery_email, recovery_email_password, extra_field_1, extra_field_2, link"
     )
     .eq("id", order.stock_item_id)
     .single();
