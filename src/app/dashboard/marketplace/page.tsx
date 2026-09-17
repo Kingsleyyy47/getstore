@@ -14,7 +14,7 @@ export default async function MarketplacePage() {
     supabase.from("wallets").select("*").eq("user_id", profile.id).single(),
     supabase
       .from("product_templates")
-      .select("*, categories(name, logo_url)")
+      .select("*, categories(name, logo_url, sort_order)")
       .order("created_at", { ascending: false }),
     getProductLogoMap(),
   ]);
@@ -29,6 +29,9 @@ export default async function MarketplacePage() {
     categoryId: t.category_id ?? null,
     categoryName: t.categories?.name ?? null,
     categoryLogoUrl: t.categories?.logo_url ?? null,
+    // Admin-set display order (Admin -> Category Shuffle) -- null for
+    // uncategorized products, which always sort last.
+    categorySortOrder: (t.categories?.sort_order ?? null) as number | null,
     // Site-wide, name-matched logo (set in Admin -> Logo) takes priority
     // over the category logo when both exist.
     logoUrl: productLogoMap.get(normalizeProductName(t.name)) ?? t.categories?.logo_url ?? null,

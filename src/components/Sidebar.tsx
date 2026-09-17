@@ -24,6 +24,7 @@ const customerItems: SidebarItem[] = [
 const adminItems: SidebarItem[] = [
   { href: "/admin", label: "Overview", icon: <IconHome /> },
   { href: "/admin/categories", label: "Categories", icon: <IconTag /> },
+  { href: "/admin/category-shuffle", label: "Category Shuffle", icon: <IconShuffle /> },
   { href: "/admin/product-templates", label: "Product Templates", icon: <IconBox /> },
   { href: "/admin/logo", label: "Logo", icon: <IconImage /> },
   { href: "/admin/bulk-upload", label: "Bulk Upload", icon: <IconUpload /> },
@@ -271,6 +272,17 @@ function IconBox() {
       <path d="M21 8 12 3 3 8l9 5 9-5Z" />
       <path d="M3 8v8l9 5 9-5V8" />
       <path d="M12 13v8" />
+    </svg>
+  );
+}
+function IconShuffle() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="m18 4 3 3-3 3" />
+      <path d="M3 7h5c1.5 0 2.5.7 3.3 2" />
+      <path d="M13.7 15c.8 1.3 1.8 2 3.3 2h4" />
+      <path d="m18 20 3-3-3-3" />
+      <path d="M3 17h5c1.5 0 2.5-.7 3.3-2M13.7 9c.8-1.3 1.8-2 3.3-2" />
     </svg>
   );
 }

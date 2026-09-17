@@ -43,7 +43,9 @@ export default async function DashboardPage() {
     // "Sold out" badge and a disabled Buy button instead of hiding them.
     supabase
       .from("product_templates")
-      .select("id, name, description, price_cents, available_count, category_id, categories(name, logo_url)"),
+      .select(
+        "id, name, description, price_cents, available_count, category_id, categories(name, logo_url, sort_order)"
+      ),
     supabase
       .from("rentals")
       .select("status, price_cents")
@@ -65,9 +67,10 @@ export default async function DashboardPage() {
       .reduce((sum: number, r: any) => sum + (r.price_cents ?? 0), 0) +
     (monthOrders ?? []).reduce((sum: number, o: any) => sum + (o.price_cents ?? 0), 0);
 
-  // Same category + product data the full Marketplace page uses -- the
-  // dashboard preview shuffles both the category order and each category's
-  // products client-side instead of showing them alphabetically/by recency.
+  // Same category + product data the full Marketplace page uses. Category
+  // order follows the admin's Category Shuffle setting (same as the full
+  // Marketplace page); the dashboard preview additionally shuffles each
+  // category's own products into a random order client-side.
   const productItems = ((templates ?? []) as any[]).map((t) => ({
     id: t.id as string,
     name: t.name as string,
@@ -77,6 +80,9 @@ export default async function DashboardPage() {
     categoryId: (t.category_id ?? null) as string | null,
     categoryName: (t.categories?.name ?? null) as string | null,
     categoryLogoUrl: (t.categories?.logo_url ?? null) as string | null,
+    // Admin-set display order (Admin -> Category Shuffle) -- null for
+    // uncategorized products, which always sort last.
+    categorySortOrder: (t.categories?.sort_order ?? null) as number | null,
     // Site-wide, name-matched logo (Admin -> Logo) takes priority over
     // the category logo when both exist.
     logoUrl: (productLogoMap.get(normalizeProductName(t.name)) ?? t.categories?.logo_url ?? null) as

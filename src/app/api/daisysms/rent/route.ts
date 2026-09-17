@@ -75,11 +75,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: e.message }, { status: 502 });
     }
     const detail = e instanceof Error ? e.message : "Unknown error";
+    // IMPORTANT: an error here does NOT mean DaisySMS didn't rent a number.
+    // Our request can reach DaisySMS's real backend and get processed --
+    // charging their platform balance and creating a live activation --
+    // while the RESPONSE back to us gets mangled (e.g. an intermittent
+    // Cloudflare challenge on their end, or any other unparseable reply).
+    // We have no API-level way to check "did this specific attempt
+    // succeed anyway" after the fact, so flag it clearly for a human to
+    // check DaisySMS's own rental history instead of silently eating the
+    // cost of an orphaned number nobody was ever given.
     await notifyAdmin({
       type: "provider_error",
-      title: "USA & Canada (DaisySMS) rental failed",
-      message: detail,
-      meta: { service },
+      title: "USA & Canada (DaisySMS) rental failed to confirm -- check DaisySMS's rental history",
+      message: `${detail}\n\nThis customer was NOT charged in our system and saw a generic "couldn't rent" message. But this failure was in reading DaisySMS's response, not necessarily in the rental itself -- DaisySMS may have already rented a number and charged the platform balance for it before the response got lost. Check DaisySMS's dashboard/rental history for a "${service}" activation around this time; if one exists, either deliver it to the customer manually (see user info below) or cancel it there so the balance isn't wasted.`,
+      meta: { service, maxPriceDollars: effectiveMaxPrice, userId: user.id, userEmail: user.email ?? null },
     });
     return NextResponse.json(
       { error: "Couldn't rent a number right now. Please try again shortly." },

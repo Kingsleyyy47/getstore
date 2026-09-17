@@ -15,6 +15,9 @@ interface TemplateItem {
   categoryId: string | null;
   categoryName: string | null;
   categoryLogoUrl: string | null;
+  // Admin-set display order (Admin -> Category Shuffle) -- null for
+  // uncategorized products, which always sort last.
+  categorySortOrder?: number | null;
   // Resolved server-side: a site-wide, name-matched logo (Admin -> Logo)
   // if one exists for this product's name, else falls back to the
   // category logo. Used for the per-product icon; the category banner
@@ -26,6 +29,7 @@ interface Group {
   categoryId: string | null;
   categoryName: string;
   categoryLogoUrl: string | null;
+  categorySortOrder: number | null;
   items: TemplateItem[];
 }
 
@@ -56,26 +60,42 @@ function groupByCategory(items: TemplateItem[]): Group[] {
         categoryId: t.categoryId,
         categoryName: t.categoryName ?? "Other",
         categoryLogoUrl: t.categoryLogoUrl,
+        categorySortOrder: t.categorySortOrder ?? null,
         items: [],
       });
     }
     map.get(key)!.items.push(t);
   }
-  return Array.from(map.values());
+  // Admin-set order (Admin -> Category Shuffle) wins; uncategorized
+  // ("Other") has no sort_order and always sorts last; ties (including
+  // every category still at the default 0) fall back to alphabetical. This
+  // is a pure function of `items`, so it produces the exact same order on
+  // the server and on the client -- unlike the per-category product
+  // shuffle below, it's safe to use for the very first render.
+  return Array.from(map.values()).sort((a, b) => {
+    if (a.categorySortOrder === null && b.categorySortOrder === null) {
+      return a.categoryName.localeCompare(b.categoryName);
+    }
+    if (a.categorySortOrder === null) return 1;
+    if (b.categorySortOrder === null) return -1;
+    if (a.categorySortOrder !== b.categorySortOrder) return a.categorySortOrder - b.categorySortOrder;
+    return a.categoryName.localeCompare(b.categoryName);
+  });
 }
 
 function buildShuffledGroups(items: TemplateItem[]): Group[] {
-  const groups = groupByCategory(items).map((g) => ({ ...g, items: shuffle(g.items) }));
-  return shuffle(groups);
+  // Category order stays exactly as the admin set it (Category Shuffle) --
+  // only the products within each category get randomized.
+  return groupByCategory(items).map((g) => ({ ...g, items: shuffle(g.items) }));
 }
 
 /**
  * Dashboard "Marketplace" preview -- every category and product, same
- * visual pattern as the full Marketplace page, but shuffled into a random
- * order (both which categories show first and which products within each)
- * rather than the alphabetical/most-recent order the full page uses.
- * Tapping a product opens a checkout confirmation right here on the
- * dashboard; "See all" still links to the full Marketplace page.
+ * visual pattern as the full Marketplace page. Category order follows the
+ * admin's Category Shuffle setting (same as the full Marketplace page);
+ * each category's own products are additionally shuffled into a random
+ * order here. Tapping a product opens a checkout confirmation right here
+ * on the dashboard; "See all" still links to the full Marketplace page.
  */
 export default function ProductsSection({ templates }: { templates: TemplateItem[] }) {
   // Start with the deterministic (unshuffled) grouping -- this is what

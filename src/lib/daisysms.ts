@@ -155,8 +155,11 @@ export async function setStatusDone(id: string): Promise<void> {
 export async function cancelRental(id: string): Promise<void> {
   const { body } = await call({ action: "setStatus", id, status: 8 });
   if (body === "ACCESS_CANCEL") return;
+  // Per DaisySMS's docs, ACCESS_READY covers both "rental missing" and
+  // "already got the code" -- we can't tell which from the response alone,
+  // but either way there's nothing left to cancel.
   if (body === "ACCESS_READY")
-    throw new DaisySMSError("Rental already has a code; can't cancel", body);
+    throw new DaisySMSError("Can't cancel: this rental is missing or already has a code", body);
   throw new DaisySMSError(`Unexpected setStatus(cancel) response: ${body}`, body);
 }
 
@@ -231,18 +234,18 @@ export interface CatalogEntry {
  * Flattens getPricesVerification()'s response into a simple per-service
  * catalog for the admin pricing manager.
  *
- * PARTIALLY CONFIRMED: DaisySMS's own docs confirm the outer shape is
- * "service => country => data" (i.e. { [serviceCode]: { [countryId]:
- * <data> } }), matching what this function already assumed. What the docs
- * don't spell out is the exact field names inside <data> -- only that it
- * carries remaining-number counts (capped display at "100" for anything
- * over 100) and pricing. This still assumes `{ cost: number; count:
- * number }` per the same handler_api.php convention DaisySMS's other
- * endpoints follow. For each service, this picks the LOWEST-cost country
- * entry (so the displayed "cost" is the best price DaisySMS currently
- * offers for that service). If the USA & Canada pricing page comes back
- * empty, paste one real sample response and the field names can be
- * corrected in a couple of minutes.
+ * DaisySMS's docs confirm the outer shape is "service => country => data"
+ * (i.e. { [serviceCode]: { [countryId]: <data> } }, country 187 = USA)
+ * capping displayed remaining-number counts at "100". They don't spell out
+ * the exact field names inside <data> though, so this still tries the
+ * common handler_api.php-style names (`cost`/`count` and their usual
+ * variants) for both that nested shape and a flat { [service]: {cost,
+ * count} } shape some real responses have come back as, in case DaisySMS's
+ * actual output doesn't match their own docs exactly. For each service,
+ * this picks the LOWEST-cost country entry (so the displayed "cost" is the
+ * best price DaisySMS currently offers for that service). If the USA &
+ * Canada pricing page comes back empty, paste one real sample response and
+ * the field names can be corrected in a couple of minutes.
  */
 export async function listCatalog(): Promise<CatalogEntry[]> {
   const raw = (await getPricesVerification()) as unknown;

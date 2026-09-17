@@ -365,3 +365,28 @@ export function IconBolt({ size = 20 }: { size?: number }) {
     </svg>
   );
 }
+export function IconShuffle({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="m18 4 3 3-3 3" />
+      <path d="M3 7h5c1.5 0 2.5.7 3.3 2" />
+      <path d="M13.7 15c.8 1.3 1.8 2 3.3 2h4" />
+      <path d="m18 20 3-3-3-3" />
+      <path d="M3 17h5c1.5 0 2.5-.7 3.3-2M13.7 9c.8-1.3 1.8-2 3.3-2" />
+    </svg>
+  );
+}
+export function IconArrowUp({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 19V5M5 12l7-7 7 7" />
+    </svg>
+  );
+}
+export function IconArrowDown({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 5v14M19 12l-7 7-7-7" />
+    </svg>
+  );
+}

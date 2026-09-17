@@ -14,6 +14,9 @@ interface TemplateItem {
   categoryId: string | null;
   categoryName: string | null;
   categoryLogoUrl: string | null;
+  // Admin-set display order (Admin -> Category Shuffle) -- null for
+  // uncategorized products, which always sort last.
+  categorySortOrder?: number | null;
   // Resolved server-side: a site-wide, name-matched logo (Admin -> Logo)
   // if one exists for this product's name, else falls back to the
   // category logo. Used for the per-product icon; the category banner
@@ -79,7 +82,13 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
   const groups = useMemo(() => {
     const map = new Map<
       string,
-      { categoryId: string | null; categoryName: string; categoryLogoUrl: string | null; items: TemplateItem[] }
+      {
+        categoryId: string | null;
+        categoryName: string;
+        categoryLogoUrl: string | null;
+        categorySortOrder: number | null;
+        items: TemplateItem[];
+      }
     >();
     for (const t of filteredList) {
       const key = t.categoryId ?? "__uncategorized";
@@ -88,12 +97,24 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
           categoryId: t.categoryId,
           categoryName: t.categoryName ?? "Other",
           categoryLogoUrl: t.categoryLogoUrl,
+          categorySortOrder: t.categorySortOrder ?? null,
           items: [],
         });
       }
       map.get(key)!.items.push(t);
     }
-    return Array.from(map.values()).sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+    // Admin-set order (Admin -> Category Shuffle) wins; uncategorized
+    // ("Other") has no sort_order and always sorts last; ties (including
+    // every category still at the default 0) fall back to alphabetical.
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.categorySortOrder === null && b.categorySortOrder === null) {
+        return a.categoryName.localeCompare(b.categoryName);
+      }
+      if (a.categorySortOrder === null) return 1;
+      if (b.categorySortOrder === null) return -1;
+      if (a.categorySortOrder !== b.categorySortOrder) return a.categorySortOrder - b.categorySortOrder;
+      return a.categoryName.localeCompare(b.categoryName);
+    });
   }, [filteredList]);
 
   return (
