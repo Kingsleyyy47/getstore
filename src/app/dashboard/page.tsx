@@ -41,11 +41,14 @@ export default async function DashboardPage() {
     // No available_count filter here -- same as the full Marketplace page,
     // sold-out items still load and ProductsSection shows them with a
     // "Sold out" badge and a disabled Buy button instead of hiding them.
+    // Archived templates (Admin -> Categories -> template's 3-dot -> Archive)
+    // ARE excluded -- they're a soft-delete, not just "out of stock".
     supabase
       .from("product_templates")
       .select(
-        "id, name, description, price_cents, available_count, category_id, categories(name, logo_url, sort_order)"
-      ),
+        "id, name, description, price_cents, available_count, category_id, image_url, categories(name, logo_url, sort_order)"
+      )
+      .eq("archived", false),
     supabase
       .from("rentals")
       .select("status, price_cents")
@@ -83,11 +86,13 @@ export default async function DashboardPage() {
     // Admin-set display order (Admin -> Category Shuffle) -- null for
     // uncategorized products, which always sort last.
     categorySortOrder: (t.categories?.sort_order ?? null) as number | null,
-    // Site-wide, name-matched logo (Admin -> Logo) takes priority over
-    // the category logo when both exist.
-    logoUrl: (productLogoMap.get(normalizeProductName(t.name)) ?? t.categories?.logo_url ?? null) as
-      | string
-      | null,
+    // An explicit per-template image (set from Admin -> Categories -> Add
+    // Template) wins first, then the site-wide name-matched logo (Admin ->
+    // Logo), then the category logo.
+    logoUrl: (t.image_url ??
+      productLogoMap.get(normalizeProductName(t.name)) ??
+      t.categories?.logo_url ??
+      null) as string | null,
   }));
 
   return (

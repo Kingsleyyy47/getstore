@@ -6,6 +6,7 @@ import {
   parseTxtCombo,
   DEFAULT_TXT_FIELD_ORDER,
   resolveCsvColumns,
+  resolveTxtFieldOrder,
   promoteTxtLinkField,
 } from "@/lib/csv";
 import Modal from "@/components/Modal";
@@ -109,10 +110,14 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
       };
 
       if (isTxt) {
-        const rawFieldOrder =
+        const configuredFieldOrder =
           tmpl?.bulk_format_fields && tmpl.bulk_format_fields.length > 0
             ? tmpl.bulk_format_fields
             : DEFAULT_TXT_FIELD_ORDER;
+        // A short combo list's actual column count overrides the
+        // configured order (1 column = link, 2 = username:password, 3 =
+        // username:password:2fa) -- see resolveTxtFieldOrder.
+        const rawFieldOrder = resolveTxtFieldOrder(text, configuredFieldOrder);
         const rawRows = parseTxtCombo(text, rawFieldOrder);
         const { rows, fieldOrder } = promoteTxtLinkField(rawRows, rawFieldOrder);
         const lines = text
@@ -126,9 +131,13 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
           key,
           label: labels[key] ?? key,
         }));
+        // A link-only format (see above) has nothing else required -- the
+        // link itself is the whole credential.
         const missing: string[] = [];
-        if (!fieldOrder.includes("password")) missing.push("password");
-        if (!fieldOrder.includes("username") && !fieldOrder.includes("email")) missing.push("username or email");
+        if (!fieldOrder.includes("link")) {
+          if (!fieldOrder.includes("password")) missing.push("password");
+          if (!fieldOrder.includes("username") && !fieldOrder.includes("email")) missing.push("username or email");
+        }
 
         setPreview({
           kind: "txt",
@@ -155,9 +164,13 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
         });
         const seen = new Set(columns.map((c) => c.key));
 
+        // A link-only format (single unlabeled column -- see
+        // resolveCsvColumns) has nothing else required.
         const missing: string[] = [];
-        if (!seen.has("password")) missing.push("password");
-        if (!seen.has("email") && !seen.has("username")) missing.push("username or email");
+        if (!seen.has("link")) {
+          if (!seen.has("password")) missing.push("password");
+          if (!seen.has("email") && !seen.has("username")) missing.push("username or email");
+        }
 
         setPreview({
           kind: "csv",
@@ -442,6 +455,15 @@ export default function BulkUploadForm({ templates }: { templates: Template[] })
             <code className="text-[var(--text)]">email</code>) and{" "}
             <code className="text-[var(--text)]">password</code> are required — leave the rest blank,
             e.g. <code className="text-[var(--text)]">user123:MyPass123</code>.
+          </p>
+          <p className="text-[var(--text-muted)]">
+            The file&apos;s own column count overrides this for short lists, regardless of the
+            template&apos;s configured order above: a file with just{" "}
+            <strong className="text-[var(--text)]">one</strong> column per line is treated as a plain
+            list of login links, <strong className="text-[var(--text)]">two</strong> columns as{" "}
+            <code className="text-[var(--text)]">username:password</code>, and{" "}
+            <strong className="text-[var(--text)]">three</strong> as{" "}
+            <code className="text-[var(--text)]">username:password:2fa</code>.
           </p>
         </div>
       </div>

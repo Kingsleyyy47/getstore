@@ -6,6 +6,7 @@ import {
   parseTxtCombo,
   DEFAULT_TXT_FIELD_ORDER,
   resolveCsvColumns,
+  resolveTxtFieldOrder,
   promoteTxtLinkField,
 } from "@/lib/csv";
 
@@ -54,10 +55,14 @@ export async function POST(req: Request) {
   const isTxt = filename.toLowerCase().endsWith(".txt") || (file as File).type === "text/plain";
 
   const text = await (file as File).text();
-  const fieldOrder =
+  const configuredFieldOrder =
     Array.isArray(template.bulk_format_fields) && template.bulk_format_fields.length > 0
       ? template.bulk_format_fields
       : DEFAULT_TXT_FIELD_ORDER;
+  // A TXT combo list's actual column count overrides the configured order
+  // for short files (1 column = link, 2 = username:password, 3 =
+  // username:password:2fa) -- see resolveTxtFieldOrder in src/lib/csv.ts.
+  const fieldOrder = isTxt ? resolveTxtFieldOrder(text, configuredFieldOrder) : configuredFieldOrder;
 
   // Normalize both formats down to the same canonical keys
   // (email/username/password/.../field_1/field_2/link) before validating
@@ -112,20 +117,27 @@ export async function POST(req: Request) {
     const field2 = row["field_2"]?.trim() || null;
     const link = row["link"]?.trim() || null;
 
-    if (!password) {
-      errors.push({ row: rowNum, reason: "Missing password" });
-      return;
-    }
-    if (!email && !username) {
-      errors.push({ row: rowNum, reason: "Missing both email and username (need at least one)" });
-      return;
+    // A link-only row (the 1-column "just a list of login links" format --
+    // see resolveTxtFieldOrder/resolveCsvColumns) never has a
+    // password/username/email at all, and that's fine: the link itself IS
+    // the credential the buyer gets. Anything else still needs the normal
+    // password + (email or username) pair.
+    if (!link) {
+      if (!password) {
+        errors.push({ row: rowNum, reason: "Missing password" });
+        return;
+      }
+      if (!email && !username) {
+        errors.push({ row: rowNum, reason: "Missing both email and username (need at least one)" });
+        return;
+      }
     }
 
     validRows.push({
       product_template_id: templateId,
       email,
       username,
-      password,
+      password: password || null,
       email_password: emailPassword,
       two_fa: twoFa,
       recovery_email: recoveryEmail,

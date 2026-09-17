@@ -119,7 +119,10 @@ export interface ProductOrder {
 export interface DeliveredCredentials {
   email: string | null;
   username: string | null;
-  password: string;
+  // Null for a link-only stock item (a single-column bulk upload -- see
+  // resolveTxtFieldOrder/resolveCsvColumns in src/lib/csv.ts) -- the link
+  // itself is the whole credential there, with no separate password.
+  password: string | null;
   email_password: string | null;
   two_fa: string | null;
   recovery_email: string | null;

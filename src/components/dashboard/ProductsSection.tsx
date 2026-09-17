@@ -295,6 +295,25 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
                       </span>
                     </div>
                   </div>
+                  {/* The whole card is already the clickable element (see
+                      the outer <button>), but without something that reads
+                      as a call-to-action it wasn't obvious tapping it does
+                      anything -- this mirrors the full Marketplace page's
+                      actual Buy button visually, as a plain span so it
+                      doesn't nest a second interactive control inside the
+                      row's own button. */}
+                  <span
+                    className={`btn-primary flex h-8 shrink-0 items-center gap-1 px-3 text-xs ${
+                      t.available_count === 0 ? "opacity-60" : ""
+                    }`}
+                  >
+                    {t.available_count === 0 ? "Sold" : "Buy"}
+                    {t.available_count > 0 && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    )}
+                  </span>
                 </button>
               ))}
             </div>
@@ -357,6 +376,10 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
             <CredentialRow label="2FA code" value={delivered.two_fa} />
             <CredentialRow label="Recovery email" value={delivered.recovery_email} />
             <CredentialRow label="Recovery email password" value={delivered.recovery_email_password} />
+            {/* Always last -- a link-only item (no password/username at
+                all, see DeliveredCredentials in src/lib/types.ts) has
+                nothing else to show here, so this is often the only row. */}
+            <CredentialRow label="Login link" value={delivered.link} isLink />
             <button className="btn-primary w-full" onClick={() => setDelivered(null)}>
               Done
             </button>
@@ -367,12 +390,26 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
   );
 }
 
-function CredentialRow({ label, value }: { label: string; value: string | null }) {
+function CredentialRow({
+  label,
+  value,
+  isLink,
+}: {
+  label: string;
+  value: string | null;
+  isLink?: boolean;
+}) {
   if (!value) return null;
   return (
-    <div className="flex items-center justify-between rounded-lg bg-black/20 px-3 py-2 text-sm">
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-black/20 px-3 py-2 text-sm">
       <span className="text-[var(--text-muted)]">{label}</span>
-      <code>{value}</code>
+      {isLink ? (
+        <a href={value} target="_blank" rel="noopener noreferrer" className="break-all text-brand underline">
+          {value}
+        </a>
+      ) : (
+        <code>{value}</code>
+      )}
     </div>
   );
 }

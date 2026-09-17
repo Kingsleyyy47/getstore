@@ -106,6 +106,36 @@ export type TxtFieldKey = (typeof DEFAULT_TXT_FIELD_ORDER)[number];
  * of `fieldOrder` is ignored; any field in `fieldOrder` beyond the end of a
  * line is left blank.
  */
+/**
+ * For a combo list this short, the raw column count says more about what
+ * it means than any configured (or default) field order: exactly one
+ * column is treated as a plain list of login links, two columns as
+ * username:password, and three as username:password:2fa -- regardless of
+ * what a specific product template's bulk_format_fields happens to be set
+ * to. Longer combo lists (4+ columns) keep using the passed-in
+ * configuredOrder exactly as before. Call this once per file and pass its
+ * result into parseTxtCombo instead of the raw configured order.
+ */
+export function resolveTxtFieldOrder(
+  text: string,
+  configuredOrder: readonly string[] = DEFAULT_TXT_FIELD_ORDER
+): string[] {
+  const lines = text
+    .split(/\r\n|\r|\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length === 0) return [...configuredOrder];
+
+  const DELIMITERS = [":", "|", "\t"];
+  const delimiter = DELIMITERS.find((d) => lines.some((l) => l.includes(d))) ?? ":";
+  const columnCount = Math.max(...lines.map((l) => l.split(delimiter).length));
+
+  if (columnCount === 1) return ["link"];
+  if (columnCount === 2) return ["username", "password"];
+  if (columnCount === 3) return ["username", "password", "two_fa"];
+  return [...configuredOrder];
+}
+
 export function parseTxtCombo(
   text: string,
   fieldOrder: readonly string[] = DEFAULT_TXT_FIELD_ORDER
@@ -252,6 +282,30 @@ export function resolveCsvColumns(
       columns.push({ key: known, header: h, label: FIELD_DISPLAY_LABELS[known] });
       usedKeys.add(known);
     }
+  }
+
+  // Short, fully-unlabeled files: like the TXT combo list rule (see
+  // resolveTxtFieldOrder), a file this short is better explained by its
+  // column count than by header text nobody recognized -- one column is a
+  // plain list of login links, two is username/password, three is
+  // username/password/2fa. Only kicks in when NONE of the headers matched a
+  // known name above, so a genuinely labeled small file (e.g. a real
+  // "email,password" CSV) keeps using its own headers untouched.
+  if (usedKeys.size === 0 && headers.length >= 1 && headers.length <= 3) {
+    const shortOrder: ResolvedFieldKey[] =
+      headers.length === 1
+        ? ["link"]
+        : headers.length === 2
+          ? ["username", "password"]
+          : ["username", "password", "two_fa"];
+    return {
+      columns: headers.map((h, i) => ({
+        key: shortOrder[i],
+        header: h,
+        label: FIELD_DISPLAY_LABELS[shortOrder[i]],
+      })),
+      unrecognized: [],
+    };
   }
 
   // Pass 2: auto-detect everything else.

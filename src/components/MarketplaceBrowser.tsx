@@ -258,6 +258,10 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
             <CredentialRow label="2FA code" value={delivered.two_fa} />
             <CredentialRow label="Recovery email" value={delivered.recovery_email} />
             <CredentialRow label="Recovery email password" value={delivered.recovery_email_password} />
+            {/* Always last -- a link-only item (no password/username at
+                all, see DeliveredCredentials in src/lib/types.ts) has
+                nothing else to show here, so this is often the only row. */}
+            <CredentialRow label="Login link" value={delivered.link} isLink />
             <button className="btn-primary w-full" onClick={() => setDelivered(null)}>
               Done
             </button>
@@ -268,12 +272,26 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
   );
 }
 
-function CredentialRow({ label, value }: { label: string; value: string | null }) {
+function CredentialRow({
+  label,
+  value,
+  isLink,
+}: {
+  label: string;
+  value: string | null;
+  isLink?: boolean;
+}) {
   if (!value) return null;
   return (
-    <div className="flex items-center justify-between rounded-lg bg-black/20 px-3 py-2 text-sm">
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-black/20 px-3 py-2 text-sm">
       <span className="text-[var(--text-muted)]">{label}</span>
-      <code>{value}</code>
+      {isLink ? (
+        <a href={value} target="_blank" rel="noopener noreferrer" className="break-all text-brand underline">
+          {value}
+        </a>
+      ) : (
+        <code>{value}</code>
+      )}
     </div>
   );
 }

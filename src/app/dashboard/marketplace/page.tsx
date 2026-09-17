@@ -12,9 +12,12 @@ export default async function MarketplacePage() {
 
   const [{ data: wallet }, { data: templates }, productLogoMap] = await Promise.all([
     supabase.from("wallets").select("*").eq("user_id", profile.id).single(),
+    // Archived templates (Admin -> Categories -> template's 3-dot ->
+    // Archive) are excluded -- a soft-delete, not just "out of stock".
     supabase
       .from("product_templates")
       .select("*, categories(name, logo_url, sort_order)")
+      .eq("archived", false)
       .order("created_at", { ascending: false }),
     getProductLogoMap(),
   ]);
@@ -32,9 +35,10 @@ export default async function MarketplacePage() {
     // Admin-set display order (Admin -> Category Shuffle) -- null for
     // uncategorized products, which always sort last.
     categorySortOrder: (t.categories?.sort_order ?? null) as number | null,
-    // Site-wide, name-matched logo (set in Admin -> Logo) takes priority
-    // over the category logo when both exist.
-    logoUrl: productLogoMap.get(normalizeProductName(t.name)) ?? t.categories?.logo_url ?? null,
+    // An explicit per-template image (set from Admin -> Categories -> Add
+    // Template) wins first, then the site-wide name-matched logo (Admin ->
+    // Logo), then the category logo.
+    logoUrl: t.image_url ?? productLogoMap.get(normalizeProductName(t.name)) ?? t.categories?.logo_url ?? null,
   }));
 
   return (

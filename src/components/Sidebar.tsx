@@ -23,11 +23,16 @@ const customerItems: SidebarItem[] = [
 
 const adminItems: SidebarItem[] = [
   { href: "/admin", label: "Overview", icon: <IconHome /> },
+  // Categories, Category Shuffle, Product Templates, Logo, and Bulk Upload
+  // used to each have their own sidebar entry -- they're now all reachable
+  // from this one consolidated Categories page (see
+  // src/components/CategoryTemplateManager.tsx), which shows categories in
+  // their display order, each expandable to its own product templates,
+  // reordering, and per-template Add Logs/Edit/Archive actions. The old
+  // pages/routes still exist and still work if visited directly, they're
+  // just no longer linked here.
   { href: "/admin/categories", label: "Categories", icon: <IconTag /> },
-  { href: "/admin/category-shuffle", label: "Category Shuffle", icon: <IconShuffle /> },
-  { href: "/admin/product-templates", label: "Product Templates", icon: <IconBox /> },
-  { href: "/admin/logo", label: "Logo", icon: <IconImage /> },
-  { href: "/admin/bulk-upload", label: "Bulk Upload", icon: <IconUpload /> },
+  { href: "/admin/history", label: "History", icon: <IconHistory /> },
   { href: "/admin/customers", label: "Customers", icon: <IconUsers /> },
   { href: "/admin/topups", label: "Top-ups", icon: <IconWallet /> },
   { href: "/admin/transactions", label: "Transactions", icon: <IconReceipt /> },
@@ -266,43 +271,6 @@ function IconTag() {
     </svg>
   );
 }
-function IconBox() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M21 8 12 3 3 8l9 5 9-5Z" />
-      <path d="M3 8v8l9 5 9-5V8" />
-      <path d="M12 13v8" />
-    </svg>
-  );
-}
-function IconShuffle() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="m18 4 3 3-3 3" />
-      <path d="M3 7h5c1.5 0 2.5.7 3.3 2" />
-      <path d="M13.7 15c.8 1.3 1.8 2 3.3 2h4" />
-      <path d="m18 20 3-3-3-3" />
-      <path d="M3 17h5c1.5 0 2.5-.7 3.3-2M13.7 9c.8-1.3 1.8-2 3.3-2" />
-    </svg>
-  );
-}
-function IconImage() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <circle cx="9" cy="9" r="2" />
-      <path d="m21 15-5-5L5 21" />
-    </svg>
-  );
-}
-function IconUpload() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 16V4M6 10l6-6 6 6" />
-      <path d="M4 20h16" />
-    </svg>
-  );
-}
 function IconUsers() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -318,6 +286,15 @@ function IconBell() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+function IconHistory() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v5h5" />
+      <path d="M12 7v5l4 2" />
     </svg>
   );
 }

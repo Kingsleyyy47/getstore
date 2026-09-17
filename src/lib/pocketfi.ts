@@ -151,6 +151,55 @@ export interface VirtualAccountResult {
   accountName: string | null;
 }
 
+// Loose name hints used to pick out the right entry from PocketFi's
+// `banks` array below -- see the comment on that array for why this
+// matching exists at all.
+const PROVIDER_NAME_HINTS: Record<string, string[]> = {
+  saveheaven: ["saveheaven", "save heaven", "savehaven"],
+  paga: ["paga"],
+  kuda: ["kuda"],
+  "9psb": ["9psb", "9 payment", "9 psb", "psb"],
+  palmpay: ["palmpay", "palm pay"],
+};
+
+/**
+ * PocketFi's create-virtual-account response key is plural ("banks"), and in
+ * practice it can come back with MORE than one bank account in it -- e.g.
+ * every partner bank enabled on the merchant's PocketFi dashboard, not just
+ * the one named in the `bank` field of the request. The code used to just
+ * take `banks[0]` unconditionally, which silently handed back whichever bank
+ * happened to be listed first (in practice always the same one) regardless
+ * of which provider was actually requested -- that's why switching the
+ * Admin -> Settings provider (or a customer choosing "switch" on the
+ * prompt) appeared to do nothing: the request itself was correct, but the
+ * response was always read from the wrong array slot.
+ *
+ * This looks for the entry whose bank name actually matches the requested
+ * provider. If there's only one entry, or a confident match, it's used. If
+ * there are multiple entries and none match, it throws with the exact list
+ * of bank names PocketFi returned, instead of silently returning the wrong
+ * one again.
+ */
+function pickRequestedBank(banks: any[], bankProvider: string): any {
+  if (banks.length === 1) return banks[0];
+
+  const hints = PROVIDER_NAME_HINTS[bankProvider.toLowerCase()] ?? [bankProvider.toLowerCase()];
+  const match = banks.find((b) => {
+    const candidates = [b?.bank, b?.bankCode, b?.bank_code, b?.provider, b?.code, b?.slug, b?.bankName]
+      .filter((v) => typeof v === "string")
+      .map((v: string) => v.toLowerCase());
+    return candidates.some((c) => hints.some((h) => c.includes(h)));
+  });
+
+  if (!match) {
+    const names = banks.map((b) => b?.bankName ?? "unknown").join(", ");
+    throw new Error(
+      `PocketFi returned ${banks.length} accounts and none matched requested provider "${bankProvider}": ${names}`
+    );
+  }
+  return match;
+}
+
 /**
  * POST /api/v1/virtual-accounts/create -- creates a dedicated (static)
  * virtual account for a customer. `phone` is required (falls back to
@@ -192,7 +241,11 @@ export async function createVirtualAccount(params: {
     }),
   });
 
-  const account = body?.banks?.[0];
+  const banks = body?.banks;
+  if (!Array.isArray(banks) || banks.length === 0) {
+    throw new Error("PocketFi did not return a virtual account");
+  }
+  const account = pickRequestedBank(banks, params.bankProvider);
   if (!account?.accountNumber) throw new Error("PocketFi did not return a virtual account");
 
   return {
