@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { formatNaira } from "@/lib/types";
 import {
-  IconArrowUp,
-  IconArrowDown,
   IconChevronDown,
   IconChevronRight,
   IconDotsVertical,
@@ -135,6 +133,7 @@ export default function CategoryTemplateManager({
   }
 
   async function move(index: number, direction: -1 | 1) {
+    if (reordering) return;
     const target = index + direction;
     if (target < 0 || target >= categories.length) return;
     const next = [...categories];
@@ -189,12 +188,27 @@ export default function CategoryTemplateManager({
     setAddTemplateFor(null);
   }
 
-  function onTemplateSaved(updated: { id: string; name: string; description: string | null }) {
+  function onTemplateSaved(updated: {
+    id: string;
+    name: string;
+    description: string | null;
+    priceCents: number;
+    imageUrl: string | null;
+  }) {
     setCategories((prev) =>
       prev.map((c) => ({
         ...c,
         templates: c.templates.map((t) =>
-          t.id === updated.id ? { ...t, name: updated.name, description: updated.description } : t
+          t.id === updated.id
+            ? {
+                ...t,
+                name: updated.name,
+                description: updated.description,
+                priceCents: updated.priceCents,
+                imageUrl: updated.imageUrl,
+                logoUrl: updated.imageUrl ?? t.logoUrl,
+              }
+            : t
         ),
       }))
     );
@@ -267,26 +281,14 @@ export default function CategoryTemplateManager({
                 </button>
 
                 <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    className="btn-ghost h-8 w-8 p-0"
-                    aria-label={`Move ${category.name} up`}
-                    onClick={() => move(index, -1)}
-                    disabled={index === 0 || reordering}
-                  >
-                    <IconArrowUp size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost h-8 w-8 p-0"
-                    aria-label={`Move ${category.name} down`}
-                    onClick={() => move(index, 1)}
-                    disabled={index === categories.length - 1 || reordering}
-                  >
-                    <IconArrowDown size={16} />
-                  </button>
                   <DotMenu
                     items={[
+                      ...(index > 0
+                        ? [{ label: "Move up", onClick: () => move(index, -1) }]
+                        : []),
+                      ...(index < categories.length - 1
+                        ? [{ label: "Move down", onClick: () => move(index, 1) }]
+                        : []),
                       { label: "Edit category", onClick: () => setEditCategory(category) },
                       { label: "Delete category", danger: true, onClick: () => deleteCategory(category.id) },
                     ]}
