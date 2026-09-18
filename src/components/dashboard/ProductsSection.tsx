@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { formatNaira, type DeliveredCredentials } from "@/lib/types";
 import { formatAccountFieldOrder } from "@/lib/csv";
 import { IconStore, IconSearch, IconBox, IconInfo } from "@/components/icons";
@@ -199,19 +198,14 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
 
   return (
     <section className="card space-y-3 p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="text-[var(--text-muted)]">
-            <IconStore size={16} />
-          </span>
-          <div className="min-w-0">
-            <div className="text-sm font-bold">Marketplace</div>
-            <div className="text-xs text-[var(--text-muted)]">Premium accounts, all categories</div>
-          </div>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="text-[var(--text-muted)]">
+          <IconStore size={16} />
+        </span>
+        <div className="min-w-0">
+          <div className="text-sm font-bold">Marketplace</div>
+          <div className="truncate text-xs text-[var(--text-muted)]">Premium accounts, all categories</div>
         </div>
-        <Link href="/dashboard/marketplace" className="btn-ghost h-8 shrink-0 px-3 text-xs">
-          See all
-        </Link>
       </div>
 
       <div className="relative">
@@ -219,7 +213,7 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
           <IconSearch size={14} />
         </span>
         <input
-          className="input h-9 pl-8 text-sm"
+          className="input h-9 w-full pl-8 text-sm"
           type="text"
           placeholder="Search products..."
           value={search}
@@ -228,31 +222,18 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
       </div>
 
       {categoryOptions.length > 1 && (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setSelectedCategory("__all__")}
-            className={`btn-ghost h-9 shrink-0 whitespace-nowrap px-3 text-xs ${
-              selectedCategory === "__all__" ? "!bg-brand !text-white" : ""
-            }`}
-          >
-            All
-          </button>
-          <select
-            className="input h-9 flex-1 text-sm"
-            value={selectedCategory === "__all__" ? "" : selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value || "__all__")}
-          >
-            <option value="" disabled>
-              Choose a category...
+        <select
+          className="input h-9 w-full text-sm"
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+        >
+          <option value="__all__">All categories</option>
+          {categoryOptions.map((c) => (
+            <option key={c.key} value={c.key}>
+              {c.name}
             </option>
-            {categoryOptions.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
+          ))}
+        </select>
       )}
 
       {!hasAny && <p className="text-sm text-[var(--text-muted)]">No products available yet.</p>}

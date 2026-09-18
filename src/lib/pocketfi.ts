@@ -274,8 +274,14 @@ export async function createVirtualAccount(params: {
   // says exactly what PocketFi sent back, rather than leaving it a mystery.
   const banks = body?.banks;
   if (!Array.isArray(banks) || banks.length === 0) {
+    // Include the exact request we sent (minus phone/email, which aren't
+    // needed to trace the call) plus a UTC timestamp -- when PocketFi says
+    // this is "on our end" with no field-level error, the only way forward
+    // is handing their support the precise request + moment so they can
+    // pull it from their own server logs, since a generic "contact
+    // support" message alone tells us nothing further to fix here.
     throw new Error(
-      `PocketFi did not return a virtual account for provider "${params.bankProvider}" -- raw response: ${JSON.stringify(body)}`
+      `PocketFi did not return a virtual account for provider "${params.bankProvider}" (businessId ${businessId}) at ${new Date().toISOString()} -- raw response: ${JSON.stringify(body)}`
     );
   }
   const account = pickRequestedBank(banks, params.bankProvider);
