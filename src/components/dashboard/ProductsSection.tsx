@@ -112,16 +112,30 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [search, setSearch] = useState("");
+  // "__all__" shows every category, same as before this filter existed.
+  // Anything else is a group key (g.categoryId ?? "__uncategorized") --
+  // picking one hides every other category's banner + products entirely.
+  const [selectedCategory, setSelectedCategory] = useState("__all__");
   const [checkoutItem, setCheckoutItem] = useState<TemplateItem | null>(null);
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState<string | null>(null);
   const [delivered, setDelivered] = useState<DeliveredCredentials | null>(null);
 
+  const categoryOptions = useMemo(
+    () => baseGroups.map((g) => ({ key: g.categoryId ?? "__uncategorized", name: g.categoryName })),
+    [baseGroups]
+  );
+
   const groups = useMemo(() => {
+    const byCategory =
+      selectedCategory === "__all__"
+        ? baseGroups
+        : baseGroups.filter((g) => (g.categoryId ?? "__uncategorized") === selectedCategory);
+
     const q = search.trim().toLowerCase();
-    if (!q) return baseGroups;
+    if (!q) return byCategory;
     const result: Group[] = [];
-    for (const g of baseGroups) {
+    for (const g of byCategory) {
       const filtered = g.items.filter(
         (t) =>
           t.name.toLowerCase().includes(q) ||
@@ -132,7 +146,7 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
       result.push({ ...g, items: filtered });
     }
     return result;
-  }, [baseGroups, search]);
+  }, [baseGroups, search, selectedCategory]);
 
   const hasAny = baseGroups.some((g) => g.items.length > 0);
 
@@ -206,6 +220,32 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
+
+      {categoryOptions.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => setSelectedCategory("__all__")}
+            className={`btn-ghost h-8 shrink-0 whitespace-nowrap px-3 text-xs ${
+              selectedCategory === "__all__" ? "!bg-brand !text-white" : ""
+            }`}
+          >
+            All
+          </button>
+          {categoryOptions.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setSelectedCategory(c.key)}
+              className={`btn-ghost h-8 shrink-0 whitespace-nowrap px-3 text-xs ${
+                selectedCategory === c.key ? "!bg-brand !text-white" : ""
+              }`}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!hasAny && <p className="text-sm text-[var(--text-muted)]">No products available yet.</p>}
       {hasAny && groups.length === 0 && (

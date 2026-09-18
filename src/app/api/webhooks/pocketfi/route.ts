@@ -50,27 +50,82 @@ export async function POST(req: Request) {
     req.headers.get("http_pocketfi_signature") ??
     req.headers.get("http-pocketfi-signature");
 
-  if (!verifyWebhookSignature(rawBody, signature)) {
+  const admin = createAdminClient();
+  const signatureValid = verifyWebhookSignature(rawBody, signature);
+
+  // Log EVERY inbound webhook -- signature failures included -- before
+  // anything else, so a customer's "my transfer didn't credit" report can be
+  // diagnosed from the exact raw payload PocketFi sent (see
+  // supabase/023_pocketfi_webhook_log.sql), instead of guessing at field
+  // names with no way to check. This never blocks/fails the response --
+  // logging errors are swallowed on purpose.
+  let logId: string | null = null;
+  try {
+    const { data } = await admin
+      .from("pocketfi_webhook_events")
+      .insert({ signature_valid: signatureValid, raw_body: rawBody })
+      .select("id")
+      .single();
+    logId = data?.id ?? null;
+  } catch {
+    // ignore -- logging must never be why a real payment fails to process
+  }
+
+  if (!signatureValid) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
   const event = JSON.parse(rawBody || "{}");
-  const admin = createAdminClient();
 
+  // Wide net across every plausible field name/nesting PocketFi might use --
+  // their docs only show ONE shape (order.amount / transaction.reference)
+  // shared across checkout AND virtual-account credits, with NO documented
+  // field at all for which account number was credited. Until a real
+  // logged payload (see pocketfi_webhook_events above) confirms the exact
+  // shape for a bank-transfer credit, this checks every candidate spot
+  // rather than a single guessed one.
   const reference: string | undefined =
-    event?.transaction?.reference ?? event?.payment_id ?? event?.reference;
-  const amountNaira: number | undefined = Number(event?.order?.amount ?? event?.amount) || undefined;
+    event?.transaction?.reference ??
+    event?.transaction?.transaction_reference ??
+    event?.payment_id ??
+    event?.reference ??
+    event?.transaction_reference ??
+    event?.data?.reference;
+  const amountNaira: number | undefined =
+    Number(
+      event?.order?.amount ??
+        event?.amount ??
+        event?.transaction?.amount ??
+        event?.data?.amount ??
+        event?.order?.settlement_amount
+    ) || undefined;
   const description: string | undefined = event?.order?.description;
   const accountNumber: string | undefined =
-    event?.account ?? event?.transaction?.account ?? event?.order?.account;
+    event?.account ??
+    event?.account_number ??
+    event?.transaction?.account ??
+    event?.transaction?.account_number ??
+    event?.order?.account ??
+    event?.order?.account_number ??
+    event?.virtual_account?.account_number ??
+    event?.data?.account_number;
+
+  let matchedCheckout = false;
+  let matchedVirtualAccount = false;
 
   if (reference) {
-    const handled = await handleCheckoutPayment(admin, { reference, amountNaira, description });
-    if (handled) return NextResponse.json({ ok: true });
+    matchedCheckout = await handleCheckoutPayment(admin, { reference, amountNaira, description });
   }
 
-  if (accountNumber && amountNaira && reference) {
-    await handleVirtualAccountCredit(admin, { accountNumber, amountNaira, reference });
+  if (!matchedCheckout && accountNumber && amountNaira && reference) {
+    matchedVirtualAccount = await handleVirtualAccountCredit(admin, { accountNumber, amountNaira, reference });
+  }
+
+  if (logId) {
+    await admin
+      .from("pocketfi_webhook_events")
+      .update({ matched_checkout: matchedCheckout, matched_virtual_account: matchedVirtualAccount })
+      .eq("id", logId);
   }
 
   // Always 2xx for a recognized-but-unhandled or already-processed event so
@@ -126,16 +181,19 @@ async function handleCheckoutPayment(
   return true;
 }
 
+/** Returns true if the account number matched a known virtual account,
+ * whether or not it still needed crediting (already-processed also counts
+ * as "matched" -- it just means this exact event was a retry). */
 async function handleVirtualAccountCredit(
   admin: ReturnType<typeof createAdminClient>,
   event: { accountNumber: string; amountNaira: number; reference: string }
-) {
+): Promise<boolean> {
   const { data: account } = await admin
     .from("pocketfi_virtual_accounts")
     .select("user_id")
     .eq("account_number", event.accountNumber)
     .maybeSingle();
-  if (!account) return;
+  if (!account) return false;
 
   // Idempotency: PocketFi may retry this webhook, so check for an existing
   // row referencing this transaction reference before crediting again.
@@ -144,7 +202,7 @@ async function handleVirtualAccountCredit(
     .select("id")
     .eq("description", `Bank transfer via PocketFi (txn ${event.reference})`)
     .maybeSingle();
-  if (already) return;
+  if (already) return true;
 
   const amount_cents = Math.round(event.amountNaira * 100);
 
@@ -161,7 +219,7 @@ async function handleVirtualAccountCredit(
     .from("wallets")
     .update({ balance_cents: newBalanceCents, updated_at: new Date().toISOString() })
     .eq("user_id", account.user_id);
-  if (walletErr) return;
+  if (walletErr) return false;
 
   await admin.from("wallet_transactions").insert({
     user_id: account.user_id,
@@ -170,4 +228,5 @@ async function handleVirtualAccountCredit(
     balance_after_cents: newBalanceCents,
     description: `Bank transfer via PocketFi (txn ${event.reference})`,
   });
+  return true;
 }

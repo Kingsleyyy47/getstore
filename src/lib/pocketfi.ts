@@ -48,9 +48,22 @@ function requireEnv(name: string): string {
  * with a 422 "The phone field is required" when no phone is sent -- confirmed
  * live against this business account, contrary to the docs' framing that
  * made it sound skippable. Nothing in this app currently collects a
- * customer's phone number, so this dummy placeholder is sent whenever a
- * real one isn't available, matching the fallback pattern used elsewhere. */
-const DUMMY_PHONE = "00000000000";
+ * customer's phone number, so this placeholder is sent whenever a real one
+ * isn't available, matching the fallback pattern used elsewhere.
+ *
+ * IMPORTANT: this must look like a real Nigerian mobile number (leading 0 +
+ * a real network prefix), not an obviously-fake string of zeros. Kuda
+ * accepts a garbage phone number fine, but Paga's create-virtual-account
+ * call was failing with a generic "Unable to process your request, please
+ * contact support" specifically when the old all-zero placeholder
+ * ("00000000000") was sent -- that's not a valid-looking number for any
+ * network, and Paga's own backend evidently validates the format even
+ * though PocketFi's own request-level validation doesn't. Using a
+ * plausibly-formatted number (still not tied to any real subscriber) is the
+ * fix -- if a future provider ALSO rejects this one, the message will now
+ * include PocketFi's raw response (see createVirtualAccount below), so the
+ * next failure will say exactly what's wrong instead of guessing again. */
+const DUMMY_PHONE = "08100000000";
 
 async function pocketfiFetch<T = any>(path: string, init: RequestInit = {}): Promise<T> {
   const publicKey = requireEnv("POCKETFI_PUBLIC_KEY");
