@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { formatNaira, type DeliveredCredentials } from "@/lib/types";
-import { formatAccountFieldOrder } from "@/lib/csv";
+import { resolveAccountFormat } from "@/lib/csv";
 import EmptyState from "@/components/EmptyState";
-import { IconStore, IconBox, IconSearch, IconInfo } from "@/components/icons";
+import Modal from "@/components/Modal";
+import { IconStore, IconBox, IconSearch, IconInfo, IconCopy, IconCheck } from "@/components/icons";
 
 interface TemplateItem {
   id: string;
@@ -24,8 +25,8 @@ interface TemplateItem {
   // above the grid still always uses categoryLogoUrl.
   logoUrl?: string | null;
   // What this account comes with, e.g. ["username","password","two_fa"] --
-  // shown on the card as an "Account Format" line before purchase, since
-  // this page buys immediately with no separate confirmation step.
+  // shown as an "Account Format" line inside the checkout confirmation
+  // modal, opened by tapping the product card (see openCheckout below).
   bulkFormatFields?: string[] | null;
   field1Label?: string | null;
   field2Label?: string | null;
@@ -43,36 +44,100 @@ const BANNER_GRADIENTS = [
   "from-fuchsia-500 to-fuchsia-800",
 ];
 
-export default function MarketplaceBrowser({ templates }: { templates: TemplateItem[] }) {
-  const [busyId, setBusyId] = useState<string | null>(null);
+export default function MarketplaceBrowser({
+  templates,
+  balanceCents,
+}: {
+  templates: TemplateItem[];
+  balanceCents: number;
+}) {
   const [error, setError] = useState<string | null>(null);
-  const [delivered, setDelivered] = useState<DeliveredCredentials | null>(null);
+  // One purchase can now mean several accounts (quantity > 1) -- each
+  // successful call to /api/marketplace/purchase (one per unit, looped
+  // in confirmPurchase) adds its own delivered credentials here.
+  const [delivered, setDelivered] = useState<DeliveredCredentials[] | null>(null);
+  // Set only when a multi-quantity purchase stopped partway.
+  const [deliveredNote, setDeliveredNote] = useState<string | null>(null);
+  // Tracked locally (starting from the server-rendered balance) so the
+  // checkout modal's "Balance after" line stays correct across repeat
+  // purchases in the same visit, without needing a full page refetch.
+  const [walletBalanceCents, setWalletBalanceCents] = useState(balanceCents);
+  // Captured from checkoutItem at the moment of purchase (checkoutItem
+  // itself gets cleared right after) so the "Purchase successful" modal can
+  // still show the correct per-product Account Format alongside the actual
+  // delivered values.
+  const [deliveredItem, setDeliveredItem] = useState<TemplateItem | null>(null);
   const [list, setList] = useState(templates);
   const [search, setSearch] = useState("");
   // "__all__" shows every category, same as before this filter existed.
   // Anything else is a group key (categoryId ?? "__uncategorized") -- see
   // the matching filter on `groups` below.
   const [selectedCategory, setSelectedCategory] = useState("__all__");
+  // Tapping a product opens a checkout confirmation modal (same pattern as
+  // the dashboard's Marketplace preview) instead of buying instantly --
+  // this is where the Account Format now lives, rather than cluttering
+  // every card in the grid.
+  const [checkoutItem, setCheckoutItem] = useState<TemplateItem | null>(null);
+  // How many of checkoutItem the customer wants -- editable (not stuck at
+  // 1), but never more than what's actually in stock.
+  const [quantity, setQuantity] = useState(1);
+  const [buying, setBuying] = useState(false);
 
-  async function buy(id: string) {
-    setBusyId(id);
+  function openCheckout(t: TemplateItem) {
+    setCheckoutItem(t);
+    setQuantity(1);
     setError(null);
-    const res = await fetch("/api/marketplace/purchase", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ templateId: id }),
-    });
-    const json = await res.json();
-    setBusyId(null);
+  }
 
-    if (!res.ok) {
-      setError(json.error ?? "Purchase failed");
+  function closeCheckout() {
+    setCheckoutItem(null);
+    setError(null);
+  }
+
+  async function confirmPurchase() {
+    if (!checkoutItem) return;
+    const id = checkoutItem.id;
+    const qty = Math.max(1, Math.min(quantity, checkoutItem.available_count));
+    setBuying(true);
+    setError(null);
+
+    // No bulk-purchase endpoint exists server-side -- purchase_product()
+    // always hands out exactly one stock item per call (this is what stops
+    // two customers ever landing on the same account), so buying a
+    // quantity > 1 just calls it that many times in a row and collects
+    // every delivered set of credentials. If stock runs out mid-way or the
+    // wallet balance isn't enough for the next unit, this stops right
+    // there and still shows whatever was successfully bought.
+    const orders: DeliveredCredentials[] = [];
+    let failure: string | null = null;
+    for (let i = 0; i < qty; i++) {
+      const res = await fetch("/api/marketplace/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: id }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        failure = json.error ?? "Purchase failed";
+        break;
+      }
+      orders.push(json.order);
+    }
+
+    setBuying(false);
+
+    if (orders.length === 0) {
+      setError(failure ?? "Purchase failed");
       return;
     }
 
-    setDelivered(json.order);
+    setDeliveredNote(failure ? `Only ${orders.length} of ${qty} could be bought -- ${failure}` : null);
+    setDelivered(orders);
+    setDeliveredItem(checkoutItem);
+    setWalletBalanceCents((prev) => Math.max(0, prev - checkoutItem.price_cents * orders.length));
+    setCheckoutItem(null);
     setList((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, available_count: Math.max(0, t.available_count - 1) } : t))
+      prev.map((t) => (t.id === id ? { ...t, available_count: Math.max(0, t.available_count - orders.length) } : t))
     );
   }
 
@@ -250,7 +315,13 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {g.items.map((t) => (
-                <div key={t.id} className="card flex items-center gap-3 p-3.5 sm:p-4">
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => openCheckout(t)}
+                  disabled={t.available_count === 0}
+                  className="card flex items-center gap-3 p-3.5 text-left transition-colors enabled:hover:border-[var(--hover-border)] disabled:opacity-60 sm:p-4"
+                >
                   {t.logoUrl ?? t.categoryLogoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -279,54 +350,183 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
                         {formatNaira(t.price_cents)}
                       </span>
                     </div>
-                    {t.bulkFormatFields && t.bulkFormatFields.length > 0 && (
-                      <div className="mt-1.5 flex items-start gap-1 text-[11px] text-[var(--text-muted)]">
-                        <IconInfo size={12} />
-                        <span className="break-words">
-                          {formatAccountFieldOrder(t.bulkFormatFields, t.field1Label, t.field2Label)}
-                        </span>
-                      </div>
-                    )}
                   </div>
 
-                  <button
-                    className="btn-primary h-9 shrink-0 gap-1 px-4 text-sm"
-                    disabled={busyId === t.id || t.available_count === 0}
-                    onClick={() => buy(t.id)}
+                  <span
+                    className={`btn-primary flex h-9 shrink-0 items-center gap-1 px-4 text-sm ${
+                      t.available_count === 0 ? "opacity-60" : ""
+                    }`}
                   >
-                    {busyId === t.id ? "..." : t.available_count === 0 ? "Sold" : "Buy"}
-                    {t.available_count > 0 && busyId !== t.id && (
+                    {t.available_count === 0 ? "Sold" : "Buy"}
+                    {t.available_count > 0 && (
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                         <path d="M9 6l6 6-6 6" />
                       </svg>
                     )}
-                  </button>
-                </div>
+                  </span>
+                </button>
               ))}
             </div>
           </div>
         ))}
       </div>
 
+      {checkoutItem && (
+        <Modal title="Checkout" onClose={closeCheckout}>
+          <div className="space-y-4 text-sm">
+            {error && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-300">{error}</div>
+            )}
+
+            <div className="flex items-center gap-3">
+              {checkoutItem.logoUrl ?? checkoutItem.categoryLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={checkoutItem.logoUrl ?? checkoutItem.categoryLogoUrl ?? undefined}
+                  alt=""
+                  className="h-12 w-12 shrink-0 rounded-full border border-[var(--border)] object-cover"
+                />
+              ) : (
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-black/5 dark:bg-white/5">
+                  <IconBox size={20} />
+                </span>
+              )}
+              <div className="min-w-0">
+                <div className="font-bold">{checkoutItem.name}</div>
+                {checkoutItem.description && (
+                  <div className="text-xs text-[var(--text-muted)]">{checkoutItem.description}</div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-brand/30 bg-brand/5 px-3 py-2.5">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-brand">
+                <IconInfo size={13} />
+                Account Format
+              </div>
+              <code className="block break-words text-xs text-[var(--text-muted)]">
+                {resolveAccountFormat(
+                  checkoutItem.name,
+                  checkoutItem.bulkFormatFields,
+                  checkoutItem.field1Label,
+                  checkoutItem.field2Label
+                )}
+              </code>
+            </div>
+
+            <div className="divide-y divide-[var(--border)] rounded-lg bg-black/5 px-3 dark:bg-white/5">
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-[var(--text-muted)]">Quantity</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    disabled={quantity <= 1}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] text-sm font-bold disabled:opacity-40"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={checkoutItem.available_count}
+                    value={quantity}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      if (Number.isNaN(n)) return;
+                      setQuantity(Math.max(1, Math.min(n, checkoutItem.available_count)));
+                    }}
+                    className="input h-7 w-14 px-1 text-center text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.min(checkoutItem.available_count, q + 1))}
+                    disabled={quantity >= checkoutItem.available_count}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] text-sm font-bold disabled:opacity-40"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-[var(--text-muted)]">Price</span>
+                <span className="font-mono font-bold">{formatNaira(checkoutItem.price_cents * quantity)}</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)]">{checkoutItem.available_count} in stock</p>
+
+            <p className="text-right text-[11px] text-[var(--text-muted)]">
+              Balance after purchase:{" "}
+              {formatNaira(Math.max(0, walletBalanceCents - checkoutItem.price_cents * quantity))}
+            </p>
+
+            <button className="btn-primary w-full" onClick={confirmPurchase} disabled={buying}>
+              {buying
+                ? "Processing..."
+                : `Confirm purchase -- ${formatNaira(checkoutItem.price_cents * quantity)}`}
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {delivered && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="card w-full max-w-md space-y-3 p-6">
+          <div className="card max-h-[85vh] w-full max-w-md space-y-3 overflow-y-auto p-6">
             <h3 className="text-lg font-bold">Purchase successful</h3>
             <p className="text-sm text-[var(--text-muted)]">
-              Here are your account details. You can also find this later on the Logs page.
+              {delivered.length > 1
+                ? `Here are your ${delivered.length} account details. You can also find these later on the Logs page.`
+                : "Here are your account details. You can also find this later on the Logs page."}
             </p>
-            <CredentialRow label="Email" value={delivered.email} />
-            <CredentialRow label="Username" value={delivered.username} />
-            <CredentialRow label="Password" value={delivered.password} />
-            <CredentialRow label="Email password" value={delivered.email_password} />
-            <CredentialRow label="2FA code" value={delivered.two_fa} />
-            <CredentialRow label="Recovery email" value={delivered.recovery_email} />
-            <CredentialRow label="Recovery email password" value={delivered.recovery_email_password} />
-            {/* Always last -- a link-only item (no password/username at
-                all, see DeliveredCredentials in src/lib/types.ts) has
-                nothing else to show here, so this is often the only row. */}
-            <CredentialRow label="Login link" value={delivered.link} isLink />
-            <button className="btn-primary w-full" onClick={() => setDelivered(null)}>
+            {deliveredNote && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-600 dark:text-amber-300">
+                {deliveredNote}
+              </div>
+            )}
+            {deliveredItem && (
+              <div className="rounded-lg border border-brand/30 bg-brand/5 px-3 py-2.5">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-brand">
+                  <IconInfo size={13} />
+                  Account Format
+                </div>
+                <code className="block break-words text-xs text-[var(--text-muted)]">
+                  {resolveAccountFormat(
+                    deliveredItem.name,
+                    deliveredItem.bulkFormatFields,
+                    deliveredItem.field1Label,
+                    deliveredItem.field2Label
+                  )}
+                </code>
+              </div>
+            )}
+            {delivered.map((order, i) => (
+              <div key={i} className="space-y-2">
+                {delivered.length > 1 && (
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Account {i + 1} of {delivered.length}
+                  </div>
+                )}
+                <CredentialRow label="Email" value={order.email} />
+                <CredentialRow label="Username" value={order.username} />
+                <CredentialRow label="Password" value={order.password} />
+                <CredentialRow label="Email password" value={order.email_password} />
+                <CredentialRow label="2FA code" value={order.two_fa} />
+                <CredentialRow label="Recovery email" value={order.recovery_email} />
+                <CredentialRow label="Recovery email password" value={order.recovery_email_password} />
+                {/* Always last -- a link-only item (no password/username at
+                    all, see DeliveredCredentials in src/lib/types.ts) has
+                    nothing else to show here, so this is often the only row. */}
+                <CredentialRow label="Login link" value={order.link} isLink />
+              </div>
+            ))}
+            <button
+              className="btn-primary w-full"
+              onClick={() => {
+                setDelivered(null);
+                setDeliveredItem(null);
+                setDeliveredNote(null);
+              }}
+            >
               Done
             </button>
           </div>
@@ -345,17 +545,39 @@ function CredentialRow({
   value: string | null;
   isLink?: boolean;
 }) {
+  const [copied, setCopied] = useState(false);
   if (!value) return null;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value!);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard API unavailable -- ignore, the value is still visible to select/copy manually
+    }
+  }
+
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg bg-black/20 px-3 py-2 text-sm">
-      <span className="text-[var(--text-muted)]">{label}</span>
-      {isLink ? (
-        <a href={value} target="_blank" rel="noopener noreferrer" className="break-all text-brand underline">
-          {value}
-        </a>
-      ) : (
-        <code>{value}</code>
-      )}
+      <span className="shrink-0 text-[var(--text-muted)]">{label}</span>
+      <div className="flex min-w-0 items-center gap-2">
+        {isLink ? (
+          <a href={value} target="_blank" rel="noopener noreferrer" className="break-all text-brand underline">
+            {value}
+          </a>
+        ) : (
+          <code className="break-all">{value}</code>
+        )}
+        <button
+          type="button"
+          onClick={copy}
+          aria-label={`Copy ${label}`}
+          className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text)]"
+        >
+          {copied ? <IconCheck size={15} /> : <IconCopy size={15} />}
+        </button>
+      </div>
     </div>
   );
 }

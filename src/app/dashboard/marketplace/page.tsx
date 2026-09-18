@@ -57,7 +57,7 @@ export default async function MarketplacePage() {
           </>
         }
       />
-      <MarketplaceBrowser templates={items} />
+      <MarketplaceBrowser templates={items} balanceCents={w?.balance_cents ?? 0} />
     </div>
   );
 }

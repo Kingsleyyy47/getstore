@@ -68,16 +68,35 @@ const DUMMY_PHONE = "08100000000";
 async function pocketfiFetch<T = any>(path: string, init: RequestInit = {}): Promise<T> {
   const publicKey = requireEnv("POCKETFI_PUBLIC_KEY");
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Authorization: `Bearer ${publicKey}`,
-      ...(init.headers ?? {}),
-    },
-    cache: "no-store",
-  });
+  // Without a timeout, a stalled PocketFi API call hangs the request
+  // indefinitely -- the customer just sees a spinner/"Loading..." button
+  // that never resolves either way, with no error to act on. 20s is
+  // generous for a JSON API call but still fails fast enough to show a
+  // real error instead of leaving the UI stuck.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${publicKey}`,
+        ...(init.headers ?? {}),
+      },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error("PocketFi did not respond in time (timed out after 20s) -- please try again");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const body = await res.json().catch(() => null);
   if (!res.ok) {

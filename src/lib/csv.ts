@@ -236,6 +236,75 @@ export function formatAccountFieldOrder(
     .join(" : ");
 }
 
+/**
+ * Sensible per-platform "Account Format" layouts, matched against a
+ * product's own display name. This exists because every template used to
+ * fall back to the full 8-field DEFAULT_TXT_FIELD_ORDER when its own
+ * bulk_format_fields hadn't been (or hadn't correctly been) set in Admin ->
+ * Categories -> Edit template -- so every product, regardless of platform,
+ * displayed the same generic "Username : Password : 2FA code : Email :
+ * Email password : Recovery email : field_1 : field_2" line, including the
+ * literal unlabeled "field_1"/"field_2" placeholders. That's wrong for most
+ * platforms (Instagram/TikTok don't carry a 2FA key or recovery email;
+ * Facebook does, plus a year + friend count; a plain email account is just
+ * two fields) and looked broken to customers.
+ *
+ * This is a DISPLAY-ONLY fallback -- it never changes what's actually
+ * stored on the template or what a bulk upload parses into. An admin who
+ * has genuinely customized a template's bulk_format_fields to something
+ * OTHER than the untouched default keeps that exact customization; this
+ * only kicks in when the template is still sitting on the generic default
+ * (the common case today, since most templates were never edited after
+ * creation) or has nothing set at all.
+ */
+const PLATFORM_ACCOUNT_FORMATS: { match: RegExp; fieldOrder: string[]; field1Label?: string; field2Label?: string }[] = [
+  {
+    match: /facebook|\bfb\b/i,
+    fieldOrder: ["username", "password", "email", "email_password", "recovery_email", "two_fa", "field_1", "field_2"],
+    field1Label: "Year",
+    field2Label: "No. of friends",
+  },
+  { match: /instagram|\big\b/i, fieldOrder: ["username", "password", "email", "email_password"] },
+  { match: /tiktok/i, fieldOrder: ["username", "password", "email", "email_password"] },
+  { match: /twitter|\bx\b|\(x\)/i, fieldOrder: ["username", "password", "email", "email_password", "two_fa"] },
+  { match: /\bemail\b|gmail|outlook|hotmail|yahoo/i, fieldOrder: ["email", "password"] },
+];
+
+function sameFields(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/**
+ * The single source of truth for what "Account Format" a customer sees for
+ * a given product -- prefers the template's own bulk_format_fields when an
+ * admin has genuinely customized it, otherwise infers a correct per-
+ * platform layout from the product's name (see PLATFORM_ACCOUNT_FORMATS),
+ * and only falls all the way back to the generic default when neither
+ * applies. Use this instead of calling formatAccountFieldOrder directly
+ * wherever a product's Account Format is shown to a buyer.
+ */
+export function resolveAccountFormat(
+  productName: string,
+  bulkFormatFields: readonly string[] | null | undefined,
+  field1Label?: string | null,
+  field2Label?: string | null
+): string {
+  const isUnsetOrDefault = !bulkFormatFields || bulkFormatFields.length === 0 || sameFields(bulkFormatFields, DEFAULT_TXT_FIELD_ORDER);
+
+  if (!isUnsetOrDefault) {
+    return formatAccountFieldOrder(bulkFormatFields, field1Label, field2Label);
+  }
+
+  const inferred = PLATFORM_ACCOUNT_FORMATS.find((p) => p.match.test(productName));
+  if (inferred) {
+    return formatAccountFieldOrder(inferred.fieldOrder, field1Label ?? inferred.field1Label, field2Label ?? inferred.field2Label);
+  }
+
+  // Nothing matched a known platform -- a bare username/password format is
+  // a safer generic default than the old 8-field dump.
+  return formatAccountFieldOrder(["username", "password"], field1Label, field2Label);
+}
+
 /** CSV header names that map directly to a known column, regardless of
  * product category -- these are generic account-credential terms, not tied
  * to any one platform's field set. */

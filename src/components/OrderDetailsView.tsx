@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { formatNaira } from "@/lib/types";
-import { isLikelyUrl } from "@/lib/csv";
+import { isLikelyUrl, resolveAccountFormat } from "@/lib/csv";
 import {
   IconArrowLeft,
   IconCopy,
@@ -11,6 +11,7 @@ import {
   IconExternalLink,
   IconShieldAlert,
   IconCheck,
+  IconInfo,
 } from "@/components/icons";
 
 interface Credentials {
@@ -46,6 +47,7 @@ export default function OrderDetailsView({
   credentials,
   field1Label,
   field2Label,
+  bulkFormatFields,
 }: {
   orderId: string;
   platform: string;
@@ -56,6 +58,7 @@ export default function OrderDetailsView({
   credentials: Credentials;
   field1Label?: string | null;
   field2Label?: string | null;
+  bulkFormatFields?: string[] | null;
 }) {
   const fields: Field[] = [];
   if (credentials.email) fields.push({ label: "Email", value: credentials.email, isLink: false });
@@ -136,6 +139,16 @@ export default function OrderDetailsView({
         {productDescription && (
           <p className="mt-1 text-sm text-[var(--text-muted)]">{productDescription}</p>
         )}
+      </div>
+
+      <div className="card rounded-lg border border-brand/30 bg-brand/5 px-4 py-3">
+        <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-brand">
+          <IconInfo size={13} />
+          Account Format
+        </div>
+        <code className="block break-words text-xs text-[var(--text-muted)]">
+          {resolveAccountFormat(productName, bulkFormatFields, field1Label, field2Label)}
+        </code>
       </div>
 
       <div>

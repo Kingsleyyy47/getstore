@@ -103,16 +103,38 @@ export async function getOrCreatePrimaryAccount(
 ): Promise<{ account: VirtualAccountRow; promptNewProvider: string | null }> {
   const admin = createAdminClient();
 
-  const { data: primary } = await admin
+  // Deliberately NOT .maybeSingle() -- that errors out the instant more
+  // than one is_primary=true row exists for this user, and the old code
+  // silently treated that error as "no primary account yet," which
+  // provisioned ANOTHER primary row on every single page load once a
+  // duplicate had somehow appeared (e.g. supabase/011_pocketfi_provider_
+  // switch.sql's unique index not actually applied to this database yet).
+  // Ordering by created_at and taking the first is self-healing: it always
+  // treats the most recently issued account as correct regardless of how
+  // many duplicates exist, and the block below demotes the rest so this
+  // corrects itself even without the DB constraint in place.
+  const { data: primaries } = await admin
     .from("pocketfi_virtual_accounts")
     .select("*")
     .eq("user_id", userId)
     .eq("is_primary", true)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
-  if (!primary) {
+  if (!primaries || primaries.length === 0) {
     const created = await provisionPrimaryAccount(admin, userId, fallbackEmail, currentDefaultProvider);
     return { account: created, promptNewProvider: null };
+  }
+
+  const [primary, ...duplicates] = primaries;
+
+  if (duplicates.length > 0) {
+    await admin
+      .from("pocketfi_virtual_accounts")
+      .update({ is_primary: false })
+      .in(
+        "id",
+        duplicates.map((d) => d.id)
+      );
   }
 
   const providerChanged = primary.bank_provider && primary.bank_provider !== currentDefaultProvider;

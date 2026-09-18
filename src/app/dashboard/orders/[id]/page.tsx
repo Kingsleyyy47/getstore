@@ -13,7 +13,7 @@ export default async function OrderDetailsPage({ params }: { params: { id: strin
   // client below.
   const { data: order } = await supabase
     .from("product_orders")
-    .select("*, product_templates(name, description, field_1_label, field_2_label, categories(name))")
+    .select("*, product_templates(name, description, field_1_label, field_2_label, bulk_format_fields, categories(name))")
     .eq("id", params.id)
     .single();
 
@@ -43,6 +43,7 @@ export default async function OrderDetailsPage({ params }: { params: { id: strin
       credentials={item}
       field1Label={order.product_templates?.field_1_label ?? null}
       field2Label={order.product_templates?.field_2_label ?? null}
+      bulkFormatFields={order.product_templates?.bulk_format_fields ?? null}
     />
   );
 }

@@ -77,7 +77,7 @@ export default async function DashboardPage() {
       </section>
 
       <section>
-        <ProductsSection templates={productItems} />
+        <ProductsSection templates={productItems} balanceCents={w?.balance_cents ?? 0} />
       </section>
 
       <section>

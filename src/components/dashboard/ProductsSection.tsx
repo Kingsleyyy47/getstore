@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatNaira, type DeliveredCredentials } from "@/lib/types";
-import { formatAccountFieldOrder } from "@/lib/csv";
-import { IconStore, IconSearch, IconBox, IconInfo } from "@/components/icons";
+import { resolveAccountFormat } from "@/lib/csv";
+import { IconStore, IconSearch, IconBox, IconInfo, IconCopy, IconCheck } from "@/components/icons";
 import Modal from "@/components/Modal";
 
 interface TemplateItem {
@@ -102,7 +102,13 @@ function buildShuffledGroups(items: TemplateItem[]): Group[] {
  * order here. Tapping a product opens a checkout confirmation right here
  * on the dashboard; "See all" still links to the full Marketplace page.
  */
-export default function ProductsSection({ templates }: { templates: TemplateItem[] }) {
+export default function ProductsSection({
+  templates,
+  balanceCents,
+}: {
+  templates: TemplateItem[];
+  balanceCents: number;
+}) {
   // Start with the deterministic (unshuffled) grouping -- this is what
   // both the server render and the client's first render produce, so they
   // match. Math.random() can't run here: if the initial render shuffled
@@ -122,9 +128,29 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
   // picking one hides every other category's banner + products entirely.
   const [selectedCategory, setSelectedCategory] = useState("__all__");
   const [checkoutItem, setCheckoutItem] = useState<TemplateItem | null>(null);
+  // How many of checkoutItem the customer wants -- editable (not stuck at
+  // 1), but never more than what's actually in stock.
+  const [quantity, setQuantity] = useState(1);
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState<string | null>(null);
-  const [delivered, setDelivered] = useState<DeliveredCredentials | null>(null);
+  // One purchase can now mean several accounts (quantity > 1) -- each
+  // successful call to /api/marketplace/purchase (one per unit, looped
+  // below) adds its own delivered credentials here.
+  const [delivered, setDelivered] = useState<DeliveredCredentials[] | null>(null);
+  // Tracked locally (starting from the server-rendered balance) so the
+  // checkout modal's "Balance after" line stays correct across repeat
+  // purchases in the same visit, without needing a full page refetch.
+  const [walletBalanceCents, setWalletBalanceCents] = useState(balanceCents);
+  // Captured from checkoutItem at the moment of purchase (checkoutItem
+  // itself gets cleared right after) so the "Purchase successful" modal can
+  // still show the correct per-product Account Format alongside the actual
+  // delivered values.
+  const [deliveredItem, setDeliveredItem] = useState<TemplateItem | null>(null);
+  // Set only when a multi-quantity purchase stopped partway (see the loop
+  // in confirmPurchase) -- shown in the "Purchase successful" modal so it's
+  // clear fewer accounts were delivered than were asked for, instead of
+  // silently looking like a full success.
+  const [deliveredNote, setDeliveredNote] = useState<string | null>(null);
 
   const categoryOptions = useMemo(
     () => baseGroups.map((g) => ({ key: g.categoryId ?? "__uncategorized", name: g.categoryName })),
@@ -157,6 +183,7 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
 
   function openCheckout(t: TemplateItem) {
     setCheckoutItem(t);
+    setQuantity(1);
     setBuyError(null);
   }
 
@@ -167,30 +194,52 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
 
   async function confirmPurchase() {
     if (!checkoutItem) return;
+    const boughtId = checkoutItem.id;
+    const qty = Math.max(1, Math.min(quantity, checkoutItem.available_count));
     setBuying(true);
     setBuyError(null);
 
-    const res = await fetch("/api/marketplace/purchase", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ templateId: checkoutItem.id }),
-    });
-    const json = await res.json();
+    // No bulk-purchase endpoint exists server-side -- product_orders /
+    // purchase_product() always hands out exactly one stock item per call
+    // (this is what stops two customers ever landing on the same account),
+    // so buying a quantity > 1 just calls it that many times in a row and
+    // collects every delivered set of credentials. If stock runs out
+    // mid-way (someone else bought the last one) or the wallet balance
+    // isn't enough for the next unit, this stops right there and still
+    // shows whatever was successfully bought instead of losing it.
+    const orders: DeliveredCredentials[] = [];
+    let failure: string | null = null;
+    for (let i = 0; i < qty; i++) {
+      const res = await fetch("/api/marketplace/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: boughtId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        failure = json.error ?? "Purchase failed";
+        break;
+      }
+      orders.push(json.order);
+    }
+
     setBuying(false);
 
-    if (!res.ok) {
-      setBuyError(json.error ?? "Purchase failed");
+    if (orders.length === 0) {
+      setBuyError(failure ?? "Purchase failed");
       return;
     }
 
-    const boughtId = checkoutItem.id;
-    setDelivered(json.order);
+    setDeliveredNote(failure ? `Only ${orders.length} of ${qty} could be bought -- ${failure}` : null);
+    setDelivered(orders);
+    setDeliveredItem(checkoutItem);
+    setWalletBalanceCents((prev) => Math.max(0, prev - checkoutItem.price_cents * orders.length));
     setCheckoutItem(null);
     setBaseGroups((prev) =>
       prev.map((g) => ({
         ...g,
         items: g.items.map((t) =>
-          t.id === boughtId ? { ...t, available_count: Math.max(0, t.available_count - 1) } : t
+          t.id === boughtId ? { ...t, available_count: Math.max(0, t.available_count - orders.length) } : t
         ),
       }))
     );
@@ -380,52 +429,140 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
               </div>
             </div>
 
-            {checkoutItem.bulkFormatFields && checkoutItem.bulkFormatFields.length > 0 && (
-              <div className="rounded-lg border border-brand/30 bg-brand/5 px-3 py-2.5">
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-brand">
-                  <IconInfo size={13} />
-                  Account Format
-                </div>
-                <code className="block break-words text-xs text-[var(--text-muted)]">
-                  {formatAccountFieldOrder(
-                    checkoutItem.bulkFormatFields,
-                    checkoutItem.field1Label,
-                    checkoutItem.field2Label
-                  )}
-                </code>
+            <div className="rounded-lg border border-brand/30 bg-brand/5 px-3 py-2.5">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-brand">
+                <IconInfo size={13} />
+                Account Format
               </div>
-            )}
-
-            <div className="flex items-center justify-between rounded-lg bg-black/5 px-3 py-2.5 dark:bg-white/5">
-              <span className="text-[var(--text-muted)]">Price</span>
-              <span className="font-mono font-bold">{formatNaira(checkoutItem.price_cents)}</span>
+              <code className="block break-words text-xs text-[var(--text-muted)]">
+                {resolveAccountFormat(
+                  checkoutItem.name,
+                  checkoutItem.bulkFormatFields,
+                  checkoutItem.field1Label,
+                  checkoutItem.field2Label
+                )}
+              </code>
             </div>
 
+            <div className="divide-y divide-[var(--border)] rounded-lg bg-black/5 px-3 dark:bg-white/5">
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-[var(--text-muted)]">Quantity</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    disabled={quantity <= 1}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] text-sm font-bold disabled:opacity-40"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={checkoutItem.available_count}
+                    value={quantity}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      if (Number.isNaN(n)) return;
+                      setQuantity(Math.max(1, Math.min(n, checkoutItem.available_count)));
+                    }}
+                    className="input h-7 w-14 px-1 text-center text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.min(checkoutItem.available_count, q + 1))}
+                    disabled={quantity >= checkoutItem.available_count}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] text-sm font-bold disabled:opacity-40"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-[var(--text-muted)]">Price</span>
+                <span className="font-mono font-bold">{formatNaira(checkoutItem.price_cents * quantity)}</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)]">{checkoutItem.available_count} in stock</p>
+
+            <p className="text-right text-[11px] text-[var(--text-muted)]">
+              Balance after purchase:{" "}
+              {formatNaira(Math.max(0, walletBalanceCents - checkoutItem.price_cents * quantity))}
+            </p>
+
             <button className="btn-primary w-full" onClick={confirmPurchase} disabled={buying}>
-              {buying ? "Processing..." : `Confirm purchase -- ${formatNaira(checkoutItem.price_cents)}`}
+              {buying
+                ? "Processing..."
+                : `Confirm purchase -- ${formatNaira(checkoutItem.price_cents * quantity)}`}
             </button>
           </div>
         </Modal>
       )}
 
       {delivered && (
-        <Modal title="Purchase successful" onClose={() => setDelivered(null)}>
+        <Modal
+          title="Purchase successful"
+          onClose={() => {
+            setDelivered(null);
+            setDeliveredItem(null);
+            setDeliveredNote(null);
+          }}
+        >
           <div className="space-y-3 text-sm">
             <p className="text-[var(--text-muted)]">
-              Here are your account details. You can also find this later on the Logs page.
+              {delivered.length > 1
+                ? `Here are your ${delivered.length} account details. You can also find these later on the Logs page.`
+                : "Here are your account details. You can also find this later on the Logs page."}
             </p>
-            <CredentialRow label="Email" value={delivered.email} />
-            <CredentialRow label="Username" value={delivered.username} />
-            <CredentialRow label="Password" value={delivered.password} />
-            <CredentialRow label="Email password" value={delivered.email_password} />
-            <CredentialRow label="2FA code" value={delivered.two_fa} />
-            <CredentialRow label="Recovery email" value={delivered.recovery_email} />
-            <CredentialRow label="Recovery email password" value={delivered.recovery_email_password} />
-            {/* Always last -- a link-only item (no password/username at
-                all, see DeliveredCredentials in src/lib/types.ts) has
-                nothing else to show here, so this is often the only row. */}
-            <CredentialRow label="Login link" value={delivered.link} isLink />
-            <button className="btn-primary w-full" onClick={() => setDelivered(null)}>
+            {deliveredNote && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-600 dark:text-amber-300">
+                {deliveredNote}
+              </div>
+            )}
+            {deliveredItem && (
+              <div className="rounded-lg border border-brand/30 bg-brand/5 px-3 py-2.5">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-brand">
+                  <IconInfo size={13} />
+                  Account Format
+                </div>
+                <code className="block break-words text-xs text-[var(--text-muted)]">
+                  {resolveAccountFormat(
+                    deliveredItem.name,
+                    deliveredItem.bulkFormatFields,
+                    deliveredItem.field1Label,
+                    deliveredItem.field2Label
+                  )}
+                </code>
+              </div>
+            )}
+            {delivered.map((order, i) => (
+              <div key={i} className="space-y-2">
+                {delivered.length > 1 && (
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Account {i + 1} of {delivered.length}
+                  </div>
+                )}
+                <CredentialRow label="Email" value={order.email} />
+                <CredentialRow label="Username" value={order.username} />
+                <CredentialRow label="Password" value={order.password} />
+                <CredentialRow label="Email password" value={order.email_password} />
+                <CredentialRow label="2FA code" value={order.two_fa} />
+                <CredentialRow label="Recovery email" value={order.recovery_email} />
+                <CredentialRow label="Recovery email password" value={order.recovery_email_password} />
+                {/* Always last -- a link-only item (no password/username at
+                    all, see DeliveredCredentials in src/lib/types.ts) has
+                    nothing else to show here, so this is often the only row. */}
+                <CredentialRow label="Login link" value={order.link} isLink />
+              </div>
+            ))}
+            <button
+              className="btn-primary w-full"
+              onClick={() => {
+                setDelivered(null);
+                setDeliveredItem(null);
+                setDeliveredNote(null);
+              }}
+            >
               Done
             </button>
           </div>
@@ -444,17 +581,39 @@ function CredentialRow({
   value: string | null;
   isLink?: boolean;
 }) {
+  const [copied, setCopied] = useState(false);
   if (!value) return null;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value!);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard API unavailable -- ignore, the value is still visible to select/copy manually
+    }
+  }
+
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg bg-black/20 px-3 py-2 text-sm">
-      <span className="text-[var(--text-muted)]">{label}</span>
-      {isLink ? (
-        <a href={value} target="_blank" rel="noopener noreferrer" className="break-all text-brand underline">
-          {value}
-        </a>
-      ) : (
-        <code>{value}</code>
-      )}
+      <span className="shrink-0 text-[var(--text-muted)]">{label}</span>
+      <div className="flex min-w-0 items-center gap-2">
+        {isLink ? (
+          <a href={value} target="_blank" rel="noopener noreferrer" className="break-all text-brand underline">
+            {value}
+          </a>
+        ) : (
+          <code className="break-all">{value}</code>
+        )}
+        <button
+          type="button"
+          onClick={copy}
+          aria-label={`Copy ${label}`}
+          className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text)]"
+        >
+          {copied ? <IconCheck size={15} /> : <IconCopy size={15} />}
+        </button>
+      </div>
     </div>
   );
 }

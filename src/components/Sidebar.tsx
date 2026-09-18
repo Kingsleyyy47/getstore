@@ -18,7 +18,6 @@ const customerItems: SidebarItem[] = [
   { href: "/dashboard/marketplace", label: "Marketplace", icon: <IconStore /> },
   { href: "/dashboard/logs", label: "History", icon: <IconList /> },
   { href: "/dashboard/wallet", label: "Wallet", icon: <IconWallet /> },
-  { href: "/website", label: "Website", icon: <IconLayout /> },
 ];
 
 const adminItems: SidebarItem[] = [
