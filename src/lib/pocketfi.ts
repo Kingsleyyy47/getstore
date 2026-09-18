@@ -241,12 +241,25 @@ export async function createVirtualAccount(params: {
     }),
   });
 
+  // PocketFi returned HTTP 200 (pocketfiFetch only throws on a non-2xx
+  // status), but the body itself doesn't have a usable account -- this is
+  // NOT a network/auth failure, it's PocketFi's own response shape not
+  // matching what a successful create looks like (e.g. the requested
+  // provider isn't actually enabled/KYC-approved on this merchant account).
+  // Surface the raw body instead of a generic message so a real failure
+  // says exactly what PocketFi sent back, rather than leaving it a mystery.
   const banks = body?.banks;
   if (!Array.isArray(banks) || banks.length === 0) {
-    throw new Error("PocketFi did not return a virtual account");
+    throw new Error(
+      `PocketFi did not return a virtual account for provider "${params.bankProvider}" -- raw response: ${JSON.stringify(body)}`
+    );
   }
   const account = pickRequestedBank(banks, params.bankProvider);
-  if (!account?.accountNumber) throw new Error("PocketFi did not return a virtual account");
+  if (!account?.accountNumber) {
+    throw new Error(
+      `PocketFi returned an account for "${params.bankProvider}" with no account number -- raw response: ${JSON.stringify(body)}`
+    );
+  }
 
   return {
     providerAccountId: String(account.accountNumber),
