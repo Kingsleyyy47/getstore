@@ -9,16 +9,10 @@ export default function BalanceCard({
   name,
   email,
   balanceCents,
-  rate,
-  activeRentals,
-  spentThisMonthCents,
 }: {
   name: string;
   email: string;
   balanceCents: number;
-  rate: number;
-  activeRentals: number;
-  spentThisMonthCents: number;
 }) {
   const [visible, setVisible] = useState(true);
   const initial = (name || email || "?").trim().charAt(0).toUpperCase();
@@ -45,7 +39,7 @@ export default function BalanceCard({
           </div>
         </div>
 
-        <div className="relative grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[1.3fr_1fr] lg:items-stretch">
+        <div className="relative">
           <div>
             <div className="flex items-center justify-between">
               <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-100/70 sm:text-xs">
@@ -83,20 +77,6 @@ export default function BalanceCard({
                 <IconHistory size={14} />
                 Activity history
               </Link>
-            </div>
-          </div>
-
-          <div className="flex flex-col justify-center gap-2 rounded-xl bg-white/10 p-3.5 sm:gap-3 sm:rounded-2xl sm:p-5">
-            <span className="w-fit rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold sm:px-2.5 sm:py-1 sm:text-[11px]">
-              $1 = {formatNaira(rate * 100)}
-            </span>
-            <div className="flex items-center justify-between text-xs sm:text-[13px]">
-              <span className="text-emerald-100/70">Active rentals</span>
-              <span className="font-mono font-semibold">{activeRentals}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs sm:text-[13px]">
-              <span className="text-emerald-100/70">Spent this month</span>
-              <span className="font-mono font-semibold">{formatNaira(spentThisMonthCents)}</span>
             </div>
           </div>
         </div>

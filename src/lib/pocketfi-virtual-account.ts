@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createVirtualAccount, splitName } from "@/lib/pocketfi";
+import { createVirtualAccount, deleteCustomer, splitName } from "@/lib/pocketfi";
 
 /**
  * Shared logic behind the three /api/pocketfi/virtual-account* routes.
@@ -8,13 +8,25 @@ import { createVirtualAccount, splitName } from "@/lib/pocketfi";
  * only allows route.ts files to export recognized handler names (GET,
  * POST, ...) -- anything else has to live in a plain module like this one.
  *
- * Model: a customer can end up with MORE THAN ONE virtual account row over
- * time (one per bank provider they've ever used), but only one is ever
- * `is_primary` -- that's the account shown on the Add Funds page and handed
- * out for new transfers. Switching providers never deletes the old row, so
- * a transfer to an old, no-longer-primary account number still lands and
- * gets credited by /api/webhooks/pocketfi -- nothing that used to work
- * stops working, we just stop advertising the old number.
+ * Model: a customer can end up with MORE THAN ONE virtual account ROW IN
+ * OUR OWN DATABASE over time (one per bank provider they've ever used), but
+ * only one is ever `is_primary` -- that's the account shown on the Add
+ * Funds page and handed out for new transfers.
+ *
+ * IMPORTANT -- this used to say switching never deletes the old account on
+ * PocketFi's side, so a transfer to the old number would still land. That
+ * turned out not to be safely true: PocketFi's real docs say a customer's
+ * email "must be unique per account" and recommend ONE virtual account per
+ * customer, with no documented endpoint to add a second bank or change an
+ * existing account's bank -- only create/fetch/delete. Calling create again
+ * with the same email (what switching used to do) was very likely why
+ * "switch" kept failing with PocketFi's generic "Unable to process your
+ * request" response: that email already had an account.
+ * switchPrimaryAccount below now calls deleteCustomer() first to free the
+ * email up, then creates fresh -- which means the OLD account is genuinely
+ * gone on PocketFi's side once a switch succeeds, not just "unadvertised."
+ * The database row for it is kept for historical display only; do not
+ * assume money can still land on it after a switch.
  *
  * PocketFi's docs list phone as required to create an account, but that's
  * confirmed unneeded in practice across other live PocketFi integrations
@@ -113,10 +125,13 @@ export async function getOrCreatePrimaryAccount(
 }
 
 /**
- * Customer chose "switch" in the provider-change prompt: demotes the
- * current primary row (kept, untouched, still credits fine if money ever
- * lands on it) and provisions a brand new primary account under the
- * admin's current default provider.
+ * Customer chose "switch" in the provider-change prompt: deletes their
+ * PocketFi customer record (freeing up their email, which PocketFi requires
+ * to be unique per account -- see the module comment above for why this is
+ * necessary), demotes the current primary row in our own database (kept for
+ * historical display only -- it no longer works for new transfers once the
+ * PocketFi-side delete has happened), and provisions a brand new primary
+ * account under the admin's current default provider.
  */
 export async function switchPrimaryAccount(
   userId: string,
@@ -131,6 +146,20 @@ export async function switchPrimaryAccount(
     .eq("user_id", userId)
     .eq("is_primary", true)
     .maybeSingle();
+
+  const profile = await fetchProfile(admin, userId);
+  const email = profile?.email ?? fallbackEmail;
+
+  // Best-effort: if the customer somehow has no PocketFi record yet (e.g.
+  // this is being called out of order), PocketFi will just say so and this
+  // is harmless to ignore -- the create call right after this is the one
+  // that actually needs to succeed, and its own error will be informative
+  // if something is genuinely wrong.
+  try {
+    await deleteCustomer(email);
+  } catch {
+    // ignore -- see comment above
+  }
 
   // Demote first -- the partial unique index only allows one is_primary
   // row per user, so the old one has to stop being primary before the new

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { formatNaira, type DeliveredCredentials } from "@/lib/types";
-import { IconStore, IconSearch, IconBox } from "@/components/icons";
+import { formatAccountFieldOrder } from "@/lib/csv";
+import { IconStore, IconSearch, IconBox, IconInfo } from "@/components/icons";
 import Modal from "@/components/Modal";
 
 interface TemplateItem {
@@ -23,6 +24,11 @@ interface TemplateItem {
   // category logo. Used for the per-product icon; the category banner
   // still always uses categoryLogoUrl.
   logoUrl?: string | null;
+  // What this account comes with, e.g. ["username","password","two_fa"] --
+  // shown to the buyer as an "Account Format" line before they purchase.
+  bulkFormatFields?: string[] | null;
+  field1Label?: string | null;
+  field2Label?: string | null;
 }
 
 interface Group {
@@ -222,28 +228,30 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
       </div>
 
       {categoryOptions.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setSelectedCategory("__all__")}
-            className={`btn-ghost h-8 shrink-0 whitespace-nowrap px-3 text-xs ${
+            className={`btn-ghost h-9 shrink-0 whitespace-nowrap px-3 text-xs ${
               selectedCategory === "__all__" ? "!bg-brand !text-white" : ""
             }`}
           >
             All
           </button>
-          {categoryOptions.map((c) => (
-            <button
-              key={c.key}
-              type="button"
-              onClick={() => setSelectedCategory(c.key)}
-              className={`btn-ghost h-8 shrink-0 whitespace-nowrap px-3 text-xs ${
-                selectedCategory === c.key ? "!bg-brand !text-white" : ""
-              }`}
-            >
-              {c.name}
-            </button>
-          ))}
+          <select
+            className="input h-9 flex-1 text-sm"
+            value={selectedCategory === "__all__" ? "" : selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value || "__all__")}
+          >
+            <option value="" disabled>
+              Choose a category...
+            </option>
+            {categoryOptions.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
@@ -390,6 +398,22 @@ export default function ProductsSection({ templates }: { templates: TemplateItem
                 )}
               </div>
             </div>
+
+            {checkoutItem.bulkFormatFields && checkoutItem.bulkFormatFields.length > 0 && (
+              <div className="rounded-lg border border-brand/30 bg-brand/5 px-3 py-2.5">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-brand">
+                  <IconInfo size={13} />
+                  Account Format
+                </div>
+                <code className="block break-words text-xs text-[var(--text-muted)]">
+                  {formatAccountFieldOrder(
+                    checkoutItem.bulkFormatFields,
+                    checkoutItem.field1Label,
+                    checkoutItem.field2Label
+                  )}
+                </code>
+              </div>
+            )}
 
             <div className="flex items-center justify-between rounded-lg bg-black/5 px-3 py-2.5 dark:bg-white/5">
               <span className="text-[var(--text-muted)]">Price</span>

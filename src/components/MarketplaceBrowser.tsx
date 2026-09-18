@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { formatNaira, type DeliveredCredentials } from "@/lib/types";
+import { formatAccountFieldOrder } from "@/lib/csv";
 import EmptyState from "@/components/EmptyState";
-import { IconStore, IconBox, IconSearch } from "@/components/icons";
+import { IconStore, IconBox, IconSearch, IconInfo } from "@/components/icons";
 
 interface TemplateItem {
   id: string;
@@ -22,6 +23,12 @@ interface TemplateItem {
   // category logo. Used for the per-product icon; the category banner
   // above the grid still always uses categoryLogoUrl.
   logoUrl?: string | null;
+  // What this account comes with, e.g. ["username","password","two_fa"] --
+  // shown on the card as an "Account Format" line before purchase, since
+  // this page buys immediately with no separate confirmation step.
+  bulkFormatFields?: string[] | null;
+  field1Label?: string | null;
+  field2Label?: string | null;
 }
 
 // A rotating set of gradients so each category banner reads distinctly
@@ -42,6 +49,10 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
   const [delivered, setDelivered] = useState<DeliveredCredentials | null>(null);
   const [list, setList] = useState(templates);
   const [search, setSearch] = useState("");
+  // "__all__" shows every category, same as before this filter existed.
+  // Anything else is a group key (categoryId ?? "__uncategorized") -- see
+  // the matching filter on `groups` below.
+  const [selectedCategory, setSelectedCategory] = useState("__all__");
 
   async function buy(id: string) {
     setBusyId(id);
@@ -65,16 +76,33 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
     );
   }
 
+  // Options for the category dropdown -- built from the full, unfiltered
+  // list so every category still shows up regardless of the current search
+  // text or which category is currently selected.
+  const categoryOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const t of list) {
+      const key = t.categoryId ?? "__uncategorized";
+      if (!seen.has(key)) seen.set(key, t.categoryName ?? "Other");
+    }
+    return Array.from(seen, ([key, name]) => ({ key, name }));
+  }, [list]);
+
   const filteredList = useMemo(() => {
+    const byCategory =
+      selectedCategory === "__all__"
+        ? list
+        : list.filter((t) => (t.categoryId ?? "__uncategorized") === selectedCategory);
+
     const q = search.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter(
+    if (!q) return byCategory;
+    return byCategory.filter(
       (t) =>
         t.name.toLowerCase().includes(q) ||
         (t.description ?? "").toLowerCase().includes(q) ||
         (t.categoryName ?? "").toLowerCase().includes(q)
     );
-  }, [list, search]);
+  }, [list, search, selectedCategory]);
 
   // Group templates by category so each category renders as its own big
   // banner section with its products listed underneath -- not merged
@@ -143,6 +171,34 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+        </div>
+      )}
+
+      {list.length > 0 && categoryOptions.length > 1 && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setSelectedCategory("__all__")}
+            className={`btn-ghost h-9 shrink-0 whitespace-nowrap px-3 text-sm ${
+              selectedCategory === "__all__" ? "!bg-brand !text-white" : ""
+            }`}
+          >
+            All
+          </button>
+          <select
+            className="input h-9 flex-1 text-sm"
+            value={selectedCategory === "__all__" ? "" : selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value || "__all__")}
+          >
+            <option value="" disabled>
+              Choose a category...
+            </option>
+            {categoryOptions.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
@@ -223,6 +279,14 @@ export default function MarketplaceBrowser({ templates }: { templates: TemplateI
                         {formatNaira(t.price_cents)}
                       </span>
                     </div>
+                    {t.bulkFormatFields && t.bulkFormatFields.length > 0 && (
+                      <div className="mt-1.5 flex items-start gap-1 text-[11px] text-[var(--text-muted)]">
+                        <IconInfo size={12} />
+                        <span className="break-words">
+                          {formatAccountFieldOrder(t.bulkFormatFields, t.field1Label, t.field2Label)}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <button

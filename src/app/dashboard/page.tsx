@@ -10,33 +10,12 @@ import ProductsSection from "@/components/dashboard/ProductsSection";
 import Link from "next/link";
 import { IconPlus } from "@/components/icons";
 
-const ACTIVE_RENTAL_STATUS = "waiting";
-const SPENT_RENTAL_STATUSES = new Set(["waiting", "received", "done"]);
-
-function monthStartUTC(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-}
-
 export default async function DashboardPage() {
   const profile = await requireUser();
   const supabase = createClient();
-  const thisMonthStart = monthStartUTC(new Date());
 
-  const [
-    { data: wallet },
-    { count: activeRentalCount },
-    settings,
-    { data: templates },
-    { data: monthRentals },
-    { data: monthOrders },
-    productLogoMap,
-  ] = await Promise.all([
+  const [{ data: wallet }, settings, { data: templates }, productLogoMap] = await Promise.all([
     supabase.from("wallets").select("*").eq("user_id", profile.id).single(),
-    supabase
-      .from("rentals")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", profile.id)
-      .eq("status", ACTIVE_RENTAL_STATUS),
     getSettings(),
     // No available_count filter here -- same as the full Marketplace page,
     // sold-out items still load and ProductsSection shows them with a
@@ -46,29 +25,13 @@ export default async function DashboardPage() {
     supabase
       .from("product_templates")
       .select(
-        "id, name, description, price_cents, available_count, category_id, image_url, categories(name, logo_url, sort_order)"
+        "id, name, description, price_cents, available_count, category_id, image_url, bulk_format_fields, field_1_label, field_2_label, categories(name, logo_url, sort_order)"
       )
       .eq("archived", false),
-    supabase
-      .from("rentals")
-      .select("status, price_cents")
-      .eq("user_id", profile.id)
-      .gte("created_at", thisMonthStart.toISOString()),
-    supabase
-      .from("product_orders")
-      .select("price_cents")
-      .eq("user_id", profile.id)
-      .gte("created_at", thisMonthStart.toISOString()),
     getProductLogoMap(),
   ]);
 
   const w = wallet as Wallet | null;
-
-  const spentThisMonthCents =
-    (monthRentals ?? [])
-      .filter((r: any) => SPENT_RENTAL_STATUSES.has(r.status))
-      .reduce((sum: number, r: any) => sum + (r.price_cents ?? 0), 0) +
-    (monthOrders ?? []).reduce((sum: number, o: any) => sum + (o.price_cents ?? 0), 0);
 
   // Same category + product data the full Marketplace page uses. Category
   // order follows the admin's Category Shuffle setting (same as the full
@@ -93,6 +56,11 @@ export default async function DashboardPage() {
       productLogoMap.get(normalizeProductName(t.name)) ??
       t.categories?.logo_url ??
       null) as string | null,
+    // What this account comes with (Username : Password : 2FA code : ...) --
+    // shown to the buyer before they purchase.
+    bulkFormatFields: (t.bulk_format_fields ?? null) as string[] | null,
+    field1Label: (t.field_1_label ?? null) as string | null,
+    field2Label: (t.field_2_label ?? null) as string | null,
   }));
 
   return (
@@ -101,9 +69,6 @@ export default async function DashboardPage() {
         name={profile.full_name ?? profile.email}
         email={profile.email}
         balanceCents={w?.balance_cents ?? 0}
-        rate={settings.usd_to_ngn_rate}
-        activeRentals={activeRentalCount ?? 0}
-        spentThisMonthCents={spentThisMonthCents}
       />
 
       <section>

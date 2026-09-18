@@ -225,6 +225,17 @@ function pickRequestedBank(banks: any[], bankProvider: string): any {
  * "paga", "kuda", "9psb", "palmpay" -- NOT the previous guessed set. If
  * Admin -> Settings has a different value saved (e.g. from before this
  * fix), update it there.
+ *
+ * IMPORTANT -- per the docs, `email` "must be unique per account", and
+ * PocketFi's own guidance is one virtual account per customer. Calling this
+ * a SECOND time with an email that already has an account on this business
+ * (e.g. switching an existing customer to a different bank) is very likely
+ * what was producing PocketFi's generic "Unable to process your request,
+ * please contact support" response -- there's no documented endpoint to
+ * change an existing account's bank, only create/fetch/delete. See
+ * `deleteCustomer` below and switchPrimaryAccount in
+ * pocketfi-virtual-account.ts, which now deletes the old customer record
+ * first so the same email is free to register again on the new bank.
  */
 export async function createVirtualAccount(params: {
   email: string;
@@ -280,6 +291,27 @@ export async function createVirtualAccount(params: {
     bankName: String(account.bankName ?? "PocketFi"),
     accountName: account.accountName ?? null,
   };
+}
+
+/**
+ * POST /api/v1/vcutomer/delete -- yes, "vcutomer" is the docs' literal
+ * (misspelled) path, not a typo introduced here. Removes a customer's
+ * record from PocketFi entirely for this business, keyed by email -- per
+ * the docs there's no narrower "delete just this virtual account" endpoint.
+ * Used by switchPrimaryAccount (pocketfi-virtual-account.ts) to free up an
+ * email that already has an account so it can be re-registered on a
+ * different bank -- see the big comment on createVirtualAccount above for
+ * why this is necessary. This is NOT confirmed to only remove the virtual
+ * account and leave transaction history intact; it may remove the whole
+ * customer record, which is why the "switch" flow's old promise that "the
+ * old account keeps working" no longer holds once this has been called.
+ */
+export async function deleteCustomer(email: string): Promise<void> {
+  const businessId = requireEnv("POCKETFI_BUSINESS_ID");
+  await pocketfiFetch<any>("/api/v1/vcutomer/delete", {
+    method: "POST",
+    body: JSON.stringify({ businessId, email }),
+  });
 }
 
 /**

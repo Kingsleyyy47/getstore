@@ -45,7 +45,7 @@ export default async function LogsPage() {
         }
       />
 
-      <section>
+      <section id="numbers">
         <h2 className="mb-3 text-lg font-bold">Number History</h2>
         <div className="card divide-y divide-[var(--border)]">
           {rentalList.length === 0 && (
@@ -80,7 +80,7 @@ export default async function LogsPage() {
         </div>
       </section>
 
-      <section>
+      <section id="purchases">
         <h2 className="mb-3 text-lg font-bold">Purchase History</h2>
         <div className="card divide-y divide-[var(--border)]">
           {orderList.length === 0 && (

@@ -4,29 +4,33 @@ import { createClient } from "@/lib/supabase/server";
 import { formatNaira, type Wallet, type WalletTransaction } from "@/lib/types";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
-import { IconWallet, IconPlus, IconReceipt, IconCard, IconMessage } from "@/components/icons";
+import { IconWallet, IconPhone, IconStore, IconMessage } from "@/components/icons";
 
+// "Add Funds" and "Payment Methods" tiles were removed here per request --
+// this page is now purely a history hub (SMS/numbers, marketplace logs,
+// deposits) plus Support. Topping up still lives at /dashboard/topup,
+// reachable from the dashboard's own "Add Money" button.
 const TILES = [
   {
-    href: "/dashboard/topup",
-    icon: <IconPlus />,
-    color: "bg-brand/10 text-brand",
-    title: "Add Funds",
-    body: "Top up your wallet in Naira",
-  },
-  {
-    href: "/dashboard/logs",
-    icon: <IconReceipt />,
+    href: "/dashboard/logs#numbers",
+    icon: <IconPhone />,
     color: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-    title: "Purchase History",
-    body: "Numbers and marketplace orders",
+    title: "SMS History",
+    body: "Numbers you've rented",
   },
   {
-    href: "/faq",
-    icon: <IconCard />,
-    color: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    title: "Payment Methods",
-    body: "How manual top-ups are reviewed",
+    href: "/dashboard/logs#purchases",
+    icon: <IconStore />,
+    color: "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400",
+    title: "Logs History",
+    body: "Marketplace orders & delivered logins",
+  },
+  {
+    href: "#deposits",
+    icon: <IconWallet />,
+    color: "bg-brand/10 text-brand",
+    title: "Deposit History",
+    body: "Money added to your wallet",
   },
   {
     href: "/faq",
@@ -43,10 +47,14 @@ export default async function WalletPage() {
 
   const [{ data: wallet }, { data: txs }] = await Promise.all([
     supabase.from("wallets").select("*").eq("user_id", profile.id).single(),
+    // Deposits only now -- this section is titled "Deposit History" below,
+    // not a full wallet ledger (that used to also include purchases,
+    // refunds, etc).
     supabase
       .from("wallet_transactions")
       .select("*")
       .eq("user_id", profile.id)
+      .eq("type", "topup")
       .order("created_at", { ascending: false })
       .limit(50),
   ]);
@@ -63,7 +71,7 @@ export default async function WalletPage() {
       />
 
       <div className="card overflow-hidden">
-        <div className="relative overflow-hidden bg-gradient-to-br from-brand to-emerald-700 p-6 text-white sm:p-8">
+        <div className="relative overflow-hidden bg-gradient-to-br from-brand to-emerald-700 p-4 text-white">
           <div
             className="pointer-events-none absolute inset-0 opacity-[0.08]"
             style={{
@@ -72,13 +80,13 @@ export default async function WalletPage() {
               backgroundSize: "36px 36px",
             }}
           />
-          <div className="relative flex items-center gap-4">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
-              <IconWallet size={26} />
+          <div className="relative flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15">
+              <IconWallet size={18} />
             </span>
             <div>
-              <div className="text-sm text-emerald-100/80">Wallet balance</div>
-              <div className="mt-1 text-4xl font-extrabold">{formatNaira(w?.balance_cents ?? 0)}</div>
+              <div className="text-xs text-emerald-100/80">Wallet balance</div>
+              <div className="text-xl font-extrabold">{formatNaira(w?.balance_cents ?? 0)}</div>
             </div>
           </div>
         </div>
@@ -96,14 +104,14 @@ export default async function WalletPage() {
         ))}
       </div>
 
-      <section>
-        <h2 className="mb-3 text-lg font-bold">Wallet History</h2>
+      <section id="deposits">
+        <h2 className="mb-3 text-lg font-bold">Deposit History</h2>
         <div className="card divide-y divide-[var(--border)]">
           {txList.length === 0 && (
             <EmptyState
-              icon={<IconReceipt />}
-              title="No transactions yet"
-              body="Top up your wallet to see your ledger here."
+              icon={<IconWallet />}
+              title="No deposits yet"
+              body="Top up your wallet to see your deposits here."
               actionHref="/dashboard/topup"
               actionLabel="Add funds"
             />
@@ -114,15 +122,11 @@ export default async function WalletPage() {
               className="flex flex-col gap-2 px-4 py-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6"
             >
               <div className="min-w-0 break-words">
-                <div className="font-semibold capitalize">{t.type}</div>
                 <div className="text-[var(--text-muted)]">
-                  {t.description ?? "—"} &middot; {new Date(t.created_at).toLocaleString()}
+                  {t.description ?? "Top-up"} &middot; {new Date(t.created_at).toLocaleString()}
                 </div>
               </div>
-              <div className={t.amount_cents >= 0 ? "font-semibold text-brand" : "font-semibold text-red-500"}>
-                {t.amount_cents >= 0 ? "+" : ""}
-                {formatNaira(t.amount_cents)}
-              </div>
+              <div className="font-semibold text-brand">+{formatNaira(t.amount_cents)}</div>
             </div>
           ))}
         </div>

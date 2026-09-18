@@ -211,6 +211,31 @@ export const FIELD_DISPLAY_LABELS: Record<ResolvedFieldKey, string> = {
   link: "Link",
 };
 
+/**
+ * Turns a template's configured field order into a customer-facing string
+ * like "Username : Password : 2FA code : Email : Email password" -- shown
+ * to a buyer before they purchase, so they know exactly what an account
+ * comes with (a la the "Account Format" box on other marketplace sites).
+ * field_1/field_2 use the template's own labels (set on the template) when
+ * given, since those are generic slots whose real meaning varies per
+ * product -- falling back to FIELD_DISPLAY_LABELS' placeholder only if the
+ * template never set one.
+ */
+export function formatAccountFieldOrder(
+  fieldOrder: readonly string[] | null | undefined,
+  field1Label?: string | null,
+  field2Label?: string | null
+): string {
+  if (!fieldOrder || fieldOrder.length === 0) return "";
+  return fieldOrder
+    .map((key) => {
+      if (key === "field_1" && field1Label) return field1Label;
+      if (key === "field_2" && field2Label) return field2Label;
+      return FIELD_DISPLAY_LABELS[key as ResolvedFieldKey] ?? key;
+    })
+    .join(" : ");
+}
+
 /** CSV header names that map directly to a known column, regardless of
  * product category -- these are generic account-credential terms, not tied
  * to any one platform's field set. */

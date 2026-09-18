@@ -119,8 +119,9 @@ function VirtualAccountCard() {
         <div className="rounded-lg border border-brand/30 bg-brand/5 p-3 text-sm">
           <div className="font-semibold">We've switched to a new provider</div>
           <p className="mt-1 text-[var(--text-muted)]">
-            Transfers to your account above still work. Want a new account on the new provider
-            instead, or keep the one you have?
+            Your account above still works for now. Getting a new one on the new provider will
+            replace it, so any future transfers must go to the new account number instead — keep
+            using your current one if you're not ready to switch.
           </p>
           <div className="mt-3 flex gap-2">
             <button

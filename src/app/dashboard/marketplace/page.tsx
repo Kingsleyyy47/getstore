@@ -39,6 +39,11 @@ export default async function MarketplacePage() {
     // Template) wins first, then the site-wide name-matched logo (Admin ->
     // Logo), then the category logo.
     logoUrl: t.image_url ?? productLogoMap.get(normalizeProductName(t.name)) ?? t.categories?.logo_url ?? null,
+    // What this account comes with (Username : Password : 2FA code : ...) --
+    // shown to the buyer before they purchase.
+    bulkFormatFields: t.bulk_format_fields ?? null,
+    field1Label: t.field_1_label ?? null,
+    field2Label: t.field_2_label ?? null,
   }));
 
   return (
