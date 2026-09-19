@@ -104,7 +104,7 @@ export async function GET(req: Request, { params }: { params: { provider: string
 
   const items = live.map((entry) => {
     const o = overrideMap.get(entry.code);
-    const priceCents = computeEffectivePriceCents(entry.costUsd, rate, o ?? null);
+    const priceCents = computeEffectivePriceCents(entry.costUsd, rate, settings.markup_percent, o ?? null);
     return {
       code: entry.code,
       name: entry.name,

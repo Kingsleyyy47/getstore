@@ -6,8 +6,6 @@ import { getServicePriceRow, computeEffectivePriceCents } from "@/lib/pricing";
 import { notifyAdmin } from "@/lib/adminNotifications";
 import * as daisysms from "@/lib/daisysms";
 
-const MARKUP_PERCENT = Number(process.env.MARKUP_PERCENT ?? "0");
-
 export async function POST(req: Request) {
   const supabase = createClient();
   const {
@@ -34,7 +32,7 @@ export async function POST(req: Request) {
 
   // Admin-configured price override for this service, if any -- see
   // src/lib/pricing.ts for the precedence (customer price override >
-  // auto-markup margin > the flat MARKUP_PERCENT fallback used below).
+  // auto-markup margin > the app-wide markup_percent fallback used below).
   const priceOverride = await getServicePriceRow("daisysms", "", service);
   if (priceOverride?.is_enabled === false) {
     return NextResponse.json({ error: "This service is currently unavailable" }, { status: 403 });
@@ -54,9 +52,9 @@ export async function POST(req: Request) {
   // Cap what DaisySMS will charge us (in USD) at what the customer can
   // actually afford (accounting for markup and the exchange rate), so we
   // never rent a number we can't charge for.
-  const affordableBaseDollars = balanceNairaCents / 100 / rate / (1 + MARKUP_PERCENT / 100);
+  const affordableBaseDollars = balanceNairaCents / 100 / rate / (1 + settings.markup_percent / 100);
   const customerMaxBaseDollars =
-    maxPriceNairaCap !== undefined ? maxPriceNairaCap / rate / (1 + MARKUP_PERCENT / 100) : undefined;
+    maxPriceNairaCap !== undefined ? maxPriceNairaCap / rate / (1 + settings.markup_percent / 100) : undefined;
   const effectiveMaxPrice =
     customerMaxBaseDollars !== undefined
       ? Math.min(customerMaxBaseDollars, affordableBaseDollars)
@@ -97,7 +95,7 @@ export async function POST(req: Request) {
   }
 
   const basePriceDollars = rental.priceDollars ?? effectiveMaxPrice;
-  const chargeNairaCents = computeEffectivePriceCents(basePriceDollars, rate, priceOverride);
+  const chargeNairaCents = computeEffectivePriceCents(basePriceDollars, rate, settings.markup_percent, priceOverride);
 
   if (chargeNairaCents > balanceNairaCents) {
     // Shouldn't normally happen given the cap above, but double-check

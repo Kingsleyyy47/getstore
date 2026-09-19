@@ -1,8 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const MARKUP_PERCENT = Number(process.env.MARKUP_PERCENT ?? "0");
-
 export interface PriceOverride {
   margin_cents: number | null;
   auto_markup: boolean;
@@ -12,17 +10,28 @@ export interface PriceOverride {
 /**
  * The single source of truth for "what does the customer actually pay,
  * in Naira cents, for this service" -- used by both the admin pricing
- * pages (to show a live preview) and (eventually) the purchase routes.
+ * pages (to show a live preview) and the purchase routes.
  *
  * Precedence:
- *   1. customer_price_cents, if set -- a frozen override.
- *   2. margin_cents, if auto_markup is on -- live cost * rate + margin,
- *      recomputed fresh every call so it tracks provider cost changes.
- *   3. neither -- the original app-wide MARKUP_PERCENT fallback.
+ *   1. customer_price_cents, if set -- a frozen override for THIS ONE
+ *      product/country (set from the pricing manager's "Customer price"
+ *      column).
+ *   2. margin_cents, if auto_markup is on -- live cost * rate + a flat ₦
+ *      margin for THIS ONE product/country, recomputed fresh every call so
+ *      it tracks provider cost changes.
+ *   3. neither -- the app-wide `markup_percent` from Admin -> Settings
+ *      ("Global markup %"), applied to every DaisySMS/All Countries/US Only
+ *      product that hasn't been individually overridden above. This is
+ *      what makes the global setting act as "the markup for everything,
+ *      with per-product overrides on top" -- change it once in Settings
+ *      and every un-overridden price across every country updates; a
+ *      product an admin has specifically priced (1 or 2 above) keeps its
+ *      own number regardless of what the global percent is set to.
  */
 export function computeEffectivePriceCents(
   costUsd: number,
   rate: number,
+  markupPercent: number,
   override?: PriceOverride | null
 ): number {
   if (override?.customer_price_cents != null) {
@@ -32,7 +41,7 @@ export function computeEffectivePriceCents(
   if (override?.auto_markup && override.margin_cents != null) {
     return baseCents + override.margin_cents;
   }
-  return Math.round(baseCents * (1 + MARKUP_PERCENT / 100));
+  return Math.round(baseCents * (1 + markupPercent / 100));
 }
 
 export interface ServicePriceRow extends PriceOverride {

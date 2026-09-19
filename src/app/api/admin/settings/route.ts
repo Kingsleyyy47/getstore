@@ -24,6 +24,10 @@ export async function POST(req: Request) {
   if (!pocketfiBankProvider) {
     return NextResponse.json({ error: "Pick a bank provider for virtual accounts" }, { status: 400 });
   }
+  const markupPercent = Number(body?.markupPercent);
+  if (!Number.isFinite(markupPercent) || markupPercent < 0) {
+    return NextResponse.json({ error: "Global markup % must be a number >= 0" }, { status: 400 });
+  }
 
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -35,6 +39,7 @@ export async function POST(req: Request) {
       extra_activation_enabled: extraActivationEnabled,
       pocketfi_enabled: pocketfiEnabled,
       pocketfi_bank_provider: pocketfiBankProvider,
+      markup_percent: markupPercent,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     })

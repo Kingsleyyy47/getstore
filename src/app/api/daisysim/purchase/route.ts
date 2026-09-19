@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "That price tier is no longer available. Please refresh and try again." }, { status: 410 });
   }
 
-  const estimatedChargeNairaCents = computeEffectivePriceCents(selectedTier.price, rate, priceOverride);
+  const estimatedChargeNairaCents = computeEffectivePriceCents(selectedTier.price, rate, settings.markup_percent, priceOverride);
   if (estimatedChargeNairaCents > balanceNairaCents) {
     return NextResponse.json({ error: "Insufficient wallet balance for this price" }, { status: 402 });
   }
@@ -80,7 +80,7 @@ export async function POST(req: Request) {
 
   // Charge based on what DaisySim actually charged our platform, not our
   // estimate, in case of any last-moment drift.
-  const chargeNairaCents = computeEffectivePriceCents(result.amount_charged, rate, priceOverride);
+  const chargeNairaCents = computeEffectivePriceCents(result.amount_charged, rate, settings.markup_percent, priceOverride);
   const admin = createAdminClient();
   const newBalanceNairaCents = balanceNairaCents - chargeNairaCents;
 

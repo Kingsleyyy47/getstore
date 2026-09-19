@@ -23,6 +23,7 @@ export default function SettingsForm({
   initialExtraActivationEnabled,
   initialPocketfiEnabled,
   initialPocketfiBankProvider,
+  initialMarkupPercent,
 }: {
   initialNumbersEnabled: boolean;
   initialCountriesEnabled: boolean;
@@ -30,11 +31,13 @@ export default function SettingsForm({
   initialExtraActivationEnabled: boolean;
   initialPocketfiEnabled: boolean;
   initialPocketfiBankProvider: string;
+  initialMarkupPercent: number;
 }) {
   const [numbersEnabled, setNumbersEnabled] = useState(initialNumbersEnabled);
   const [countriesEnabled, setCountriesEnabled] = useState(initialCountriesEnabled);
   const [usNumbersEnabled, setUsNumbersEnabled] = useState(initialUsNumbersEnabled);
   const [extraActivationEnabled, setExtraActivationEnabled] = useState(initialExtraActivationEnabled);
+  const [markupPercent, setMarkupPercent] = useState(String(initialMarkupPercent));
   const [pocketfiEnabled, setPocketfiEnabled] = useState(initialPocketfiEnabled);
   const isKnownProvider = KNOWN_BANK_PROVIDERS.some((p) => p.value === initialPocketfiBankProvider);
   const [pocketfiBankProvider, setPocketfiBankProvider] = useState(
@@ -61,6 +64,7 @@ export default function SettingsForm({
         extraActivationEnabled,
         pocketfiEnabled,
         pocketfiBankProvider: pocketfiBankProvider === "other" ? customBankProvider : pocketfiBankProvider,
+        markupPercent: markupPercent === "" ? 0 : Number(markupPercent),
       }),
     });
     const json = await res.json();
@@ -106,6 +110,32 @@ export default function SettingsForm({
         checked={usNumbersEnabled}
         onChange={setUsNumbersEnabled}
       />
+
+      <div className="border-t border-[var(--border)] pt-5">
+        <div className="mb-1 text-sm font-bold uppercase tracking-wide text-[var(--text-muted)]">
+          Pricing
+        </div>
+        <div className="rounded-lg border border-[var(--border)] p-4">
+          <div className="font-semibold">Global markup %</div>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Applied automatically to every Numbers, All Countries, and US Only price that doesn&apos;t have
+            its own price set in that product&apos;s pricing page (Admin -&gt; Pricing). Change this once and
+            every un-overridden price across every service and country updates immediately -- no need to
+            price each one individually. You can still set a specific margin or a frozen ₦ price for any
+            single product/country there, and that always wins over this global percent.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              type="number"
+              step="0.1"
+              className="input w-28"
+              value={markupPercent}
+              onChange={(e) => setMarkupPercent(e.target.value)}
+            />
+            <span className="text-sm text-[var(--text-muted)]">%</span>
+          </div>
+        </div>
+      </div>
 
       <div className="border-t border-[var(--border)] pt-5">
         <div className="mb-1 text-sm font-bold uppercase tracking-wide text-[var(--text-muted)]">
