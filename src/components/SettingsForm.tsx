@@ -23,7 +23,7 @@ export default function SettingsForm({
   initialExtraActivationEnabled,
   initialPocketfiEnabled,
   initialPocketfiBankProvider,
-  initialMarkupPercent,
+  initialMarkupNaira,
 }: {
   initialNumbersEnabled: boolean;
   initialCountriesEnabled: boolean;
@@ -31,13 +31,13 @@ export default function SettingsForm({
   initialExtraActivationEnabled: boolean;
   initialPocketfiEnabled: boolean;
   initialPocketfiBankProvider: string;
-  initialMarkupPercent: number;
+  initialMarkupNaira: number;
 }) {
   const [numbersEnabled, setNumbersEnabled] = useState(initialNumbersEnabled);
   const [countriesEnabled, setCountriesEnabled] = useState(initialCountriesEnabled);
   const [usNumbersEnabled, setUsNumbersEnabled] = useState(initialUsNumbersEnabled);
   const [extraActivationEnabled, setExtraActivationEnabled] = useState(initialExtraActivationEnabled);
-  const [markupPercent, setMarkupPercent] = useState(String(initialMarkupPercent));
+  const [markupNaira, setMarkupNaira] = useState(String(initialMarkupNaira));
   const [pocketfiEnabled, setPocketfiEnabled] = useState(initialPocketfiEnabled);
   const isKnownProvider = KNOWN_BANK_PROVIDERS.some((p) => p.value === initialPocketfiBankProvider);
   const [pocketfiBankProvider, setPocketfiBankProvider] = useState(
@@ -64,7 +64,7 @@ export default function SettingsForm({
         extraActivationEnabled,
         pocketfiEnabled,
         pocketfiBankProvider: pocketfiBankProvider === "other" ? customBankProvider : pocketfiBankProvider,
-        markupPercent: markupPercent === "" ? 0 : Number(markupPercent),
+        markupNaira: markupNaira === "" ? 0 : Number(markupNaira),
       }),
     });
     const json = await res.json();
@@ -116,23 +116,25 @@ export default function SettingsForm({
           Pricing
         </div>
         <div className="rounded-lg border border-[var(--border)] p-4">
-          <div className="font-semibold">Global markup %</div>
+          <div className="font-semibold">Global markup (₦)</div>
           <p className="mt-1 text-sm text-[var(--text-muted)]">
-            Applied automatically to every Numbers, All Countries, and US Only price that doesn&apos;t have
+            A flat ₦ amount added on top of the original price (original price + markup, not a percentage) --
+            applied automatically to every Numbers, All Countries, and US Only price that doesn&apos;t have
             its own price set in that product&apos;s pricing page (Admin -&gt; Pricing). Change this once and
             every un-overridden price across every service and country updates immediately -- no need to
             price each one individually. You can still set a specific margin or a frozen ₦ price for any
-            single product/country there, and that always wins over this global percent.
+            single product/country there, and that always wins over this global markup.
           </p>
           <div className="mt-3 flex items-center gap-2">
+            <span className="text-sm text-[var(--text-muted)]">₦</span>
             <input
               type="number"
-              step="0.1"
+              step="1"
+              placeholder="e.g. 2000"
               className="input w-28"
-              value={markupPercent}
-              onChange={(e) => setMarkupPercent(e.target.value)}
+              value={markupNaira}
+              onChange={(e) => setMarkupNaira(e.target.value)}
             />
-            <span className="text-sm text-[var(--text-muted)]">%</span>
           </div>
         </div>
       </div>

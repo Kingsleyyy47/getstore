@@ -42,6 +42,49 @@ export default function ServicePricingManager({
   const [keepAutoApplying, setKeepAutoApplying] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
 
+  // The app-wide fallback markup (Admin -> Settings), shown and editable
+  // right here too -- this is what actually prices every product below
+  // that doesn't have its own override, so it shouldn't only live behind a
+  // separate Settings page the admin has to remember to go find. Loaded
+  // once, independent of `provider`/`country`, since it's the same single
+  // value everywhere. It's a flat ₦ amount ADDED on top of the original
+  // price (original price + markup), not a percentage.
+  const [globalMarkup, setGlobalMarkup] = useState("");
+  const [globalMarkupSaved, setGlobalMarkupSaved] = useState(0);
+  const [globalMarkupBusy, setGlobalMarkupBusy] = useState(false);
+  const [globalMarkupLoaded, setGlobalMarkupLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch("/api/admin/pricing/markup");
+      const json = await res.json();
+      if (res.ok) {
+        setGlobalMarkup(String(json.markupNaira));
+        setGlobalMarkupSaved(json.markupNaira);
+      }
+      setGlobalMarkupLoaded(true);
+    })();
+  }, []);
+
+  async function saveGlobalMarkup() {
+    if (globalMarkup === "") return;
+    setGlobalMarkupBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/pricing/markup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markupNaira: Number(globalMarkup) }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to save global markup");
+      setGlobalMarkupSaved(json.markupNaira);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save global markup");
+    }
+    setGlobalMarkupBusy(false);
+  }
+
   async function load() {
     setLoading(true);
     setError(null);
@@ -176,6 +219,37 @@ export default function ServicePricingManager({
 
   return (
     <div className="space-y-4">
+      <div className="card space-y-2 border-brand/30 bg-brand/5 p-4">
+        <div className="font-semibold">Global markup (₦)</div>
+        <p className="text-sm text-[var(--text-muted)]">
+          A flat ₦ amount added on top of the original price (original price + markup, not a percentage) --
+          applies to every {providerLabel} product below that doesn&apos;t have its own margin or fixed price
+          set (in the list further down) -- no country needs to be picked for this, it covers all of them at
+          once. Set a margin or price on an individual product only when you want that one to differ from
+          this.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-[var(--text-muted)]">₦</span>
+          <input
+            type="number"
+            step="1"
+            placeholder="e.g. 2000"
+            className="input w-28"
+            value={globalMarkup}
+            onChange={(e) => setGlobalMarkup(e.target.value)}
+            disabled={!globalMarkupLoaded}
+          />
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={saveGlobalMarkup}
+            disabled={globalMarkupBusy || !globalMarkupLoaded || Number(globalMarkup) === globalMarkupSaved}
+          >
+            {globalMarkupBusy ? "Saving..." : "Save global markup"}
+          </button>
+        </div>
+      </div>
+
       {countries && countries.length > 0 && (
         <div>
           <label className="label" htmlFor="pricing-country">

@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const estimatedChargeNairaCents = computeEffectivePriceCents(selectedApp.price, rate, settings.markup_percent, priceOverride);
+  const estimatedChargeNairaCents = computeEffectivePriceCents(selectedApp.price, rate, settings.markup_naira, priceOverride);
   if (estimatedChargeNairaCents > balanceNairaCents) {
     return NextResponse.json({ error: "Insufficient wallet balance for this price" }, { status: 402 });
   }
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
 
   // Charge based on what the provider actually charged our platform, not
   // our estimate, in case of any last-moment drift.
-  const chargeNairaCents = computeEffectivePriceCents(result.amount_charged, rate, settings.markup_percent, priceOverride);
+  const chargeNairaCents = computeEffectivePriceCents(result.amount_charged, rate, settings.markup_naira, priceOverride);
   const admin = createAdminClient();
   const newBalanceNairaCents = balanceNairaCents - chargeNairaCents;
 

@@ -50,7 +50,7 @@ export default async function AdminSettingsPage() {
         initialExtraActivationEnabled={settings.extra_activation_enabled}
         initialPocketfiEnabled={settings.pocketfi_enabled}
         initialPocketfiBankProvider={settings.pocketfi_bank_provider}
-        initialMarkupPercent={settings.markup_percent}
+        initialMarkupNaira={settings.markup_naira}
       />
     </div>
   );

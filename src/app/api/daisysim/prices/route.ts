@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     // need to duplicate the conversion math.
     const tiers = prices.tiers.map((t) => ({
       ...t,
-      naira_cents: computeEffectivePriceCents(t.price, settings.usd_to_ngn_rate, settings.markup_percent, priceOverride),
+      naira_cents: computeEffectivePriceCents(t.price, settings.usd_to_ngn_rate, settings.markup_naira, priceOverride),
     }));
     return NextResponse.json({ ...prices, tiers });
   } catch (e) {

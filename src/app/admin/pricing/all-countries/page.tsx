@@ -18,7 +18,7 @@ export default async function AllCountriesPricingPage() {
       <PageHeader
         icon={<IconGlobe />}
         title="All Countries pricing"
-        subtitle="Every product here already uses the Global markup % from Admin -> Settings by default -- set a margin or a frozen ₦ price below only for a specific service/country you want to price differently. Favorites pin to the top here and on the customer-facing page."
+        subtitle="Every product here already uses the Global markup (₦) from Admin -> Settings by default -- set a margin or a frozen ₦ price below only for a specific service/country you want to price differently. Favorites pin to the top here and on the customer-facing page."
       />
       {loadError ? (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">

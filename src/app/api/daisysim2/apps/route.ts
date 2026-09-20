@@ -30,7 +30,7 @@ export async function GET(req: Request) {
       .filter((a) => priceMap.get(a.code)?.is_enabled !== false)
       .map((a) => ({
         ...a,
-        naira_cents: computeEffectivePriceCents(a.price, rate, settings.markup_percent, priceMap.get(a.code)),
+        naira_cents: computeEffectivePriceCents(a.price, rate, settings.markup_naira, priceMap.get(a.code)),
         is_favorite: favoriteCodes.has(a.code),
       }))
       .sort((a, b) => Number(b.is_favorite) - Number(a.is_favorite));

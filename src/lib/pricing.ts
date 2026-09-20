@@ -19,19 +19,21 @@ export interface PriceOverride {
  *   2. margin_cents, if auto_markup is on -- live cost * rate + a flat ₦
  *      margin for THIS ONE product/country, recomputed fresh every call so
  *      it tracks provider cost changes.
- *   3. neither -- the app-wide `markup_percent` from Admin -> Settings
- *      ("Global markup %"), applied to every DaisySMS/All Countries/US Only
- *      product that hasn't been individually overridden above. This is
- *      what makes the global setting act as "the markup for everything,
- *      with per-product overrides on top" -- change it once in Settings
- *      and every un-overridden price across every country updates; a
- *      product an admin has specifically priced (1 or 2 above) keeps its
- *      own number regardless of what the global percent is set to.
+ *   3. neither -- the app-wide `markup_naira` from Admin -> Settings
+ *      ("Global markup"), a flat ₦ amount ADDED ON TOP of the original
+ *      price for every DaisySMS/All Countries/US Only product that hasn't
+ *      been individually overridden above (original price + markup, not a
+ *      percentage). This is what makes the global setting act as "the
+ *      markup for everything, with per-product overrides on top" -- change
+ *      it once in Settings and every un-overridden price across every
+ *      country updates; a product an admin has specifically priced (1 or 2
+ *      above) keeps its own number regardless of what the global markup is
+ *      set to.
  */
 export function computeEffectivePriceCents(
   costUsd: number,
   rate: number,
-  markupPercent: number,
+  markupNaira: number,
   override?: PriceOverride | null
 ): number {
   if (override?.customer_price_cents != null) {
@@ -41,7 +43,7 @@ export function computeEffectivePriceCents(
   if (override?.auto_markup && override.margin_cents != null) {
     return baseCents + override.margin_cents;
   }
-  return Math.round(baseCents * (1 + markupPercent / 100));
+  return baseCents + Math.round(markupNaira * 100);
 }
 
 export interface ServicePriceRow extends PriceOverride {

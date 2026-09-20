@@ -1,15 +1,23 @@
 -- ============================================================================
--- Global fallback markup (%) applied to every DaisySMS / All Countries / US
--- Only price that doesn't have its own per-product override (see
--- provider_service_prices -- margin_cents/auto_markup/customer_price_cents,
--- set from each pricing manager's "Save margin"/"Save price" buttons).
+-- Global fallback markup -- a flat NAIRA AMOUNT added on top of the
+-- original price (original price + markup, NOT a percentage) -- applied to
+-- every DaisySMS / All Countries / US Only price that doesn't have its own
+-- per-product override (see provider_service_prices --
+-- margin_cents/auto_markup/customer_price_cents, set from each pricing
+-- manager's "Save margin"/"Save price" buttons).
 --
 -- This replaces the old MARKUP_PERCENT environment variable, which could
 -- only be changed by editing .env and redeploying -- now it's a normal
 -- Admin -> Settings field, editable live, with the exact same precedence
 -- computeEffectivePriceCents already had: a specific product/country
--- override always wins; everything else falls back to this percent.
+-- override always wins; everything else falls back to this flat ₦ amount
+-- being added to the original price.
+--
+-- markup_naira is stored as whole naira (e.g. 2000 means "+ NGN2,000"),
+-- matching what the admin types in the UI -- it's converted to kobo/cents
+-- (x100) only inside computeEffectivePriceCents.
 --
 -- Run this AFTER supabase/023_pocketfi_webhook_log.sql.
 -- ============================================================================
-alter table app_settings add column if not exists markup_percent numeric not null default 0;
+alter table app_settings add column if not exists markup_naira numeric not null default 0;
+alter table app_settings drop column if exists markup_percent;
