@@ -70,16 +70,36 @@ async function call(params: Record<string, string | number | undefined>) {
 
   // Previously this sent a spoofed desktop-Chrome User-Agent + Accept
   // headers on the theory that a plain server fetch looks more bot-like to
-  // Cloudflare than a "real browser" one. In practice that's backwards: a
-  // server that CLAIMS to be Chrome 124 while its actual TLS/HTTP
-  // fingerprint (no cookies, no client hints, no JS execution, a
-  // datacenter IP) obviously isn't Chrome is a classic bot-detection red
-  // flag -- more suspicious than an honest, header-less request, which is
-  // exactly how a working reference DaisySMS integration on different
-  // infrastructure (Supabase Edge Functions, not Vercel) calls this same
-  // handler_api.php endpoint with zero custom headers and no Cloudflare
-  // issues. So: send a plain request, don't impersonate a browser.
-  const res = await fetchWithTimeout(url.toString());
+  // Cloudflare than a "real browser" one. Removing those was still the
+  // right call (a server claiming to be Chrome while its actual TLS/HTTP
+  // fingerprint obviously isn't Chrome is more suspicious, not less), but
+  // it turned out not to be the whole story: DaisySMS/Cloudflare appears to
+  // also block Vercel's shared serverless IP ranges outright, regardless of
+  // headers. So when DAISYSMS_PROXY_URL is configured, route the actual
+  // outbound call through a Supabase Edge Function instead (see
+  // supabase/functions/daisysms-proxy) -- the same network a confirmed
+  // -working reference DaisySMS integration uses successfully. Falls back
+  // to calling DaisySMS directly if the proxy isn't configured.
+  const proxyUrl = process.env.DAISYSMS_PROXY_URL?.trim();
+  let res: Response;
+  if (proxyUrl) {
+    const proxySecret = process.env.DAISYSMS_PROXY_SECRET?.trim();
+    if (!proxySecret) {
+      throw new DaisySMSError(
+        "DAISYSMS_PROXY_URL is set but DAISYSMS_PROXY_SECRET is missing -- set it to the same value configured on the Supabase daisysms-proxy function."
+      );
+    }
+    let proxied: URL;
+    try {
+      proxied = new URL(proxyUrl);
+    } catch {
+      throw new DaisySMSError("Invalid DAISYSMS_PROXY_URL -- expected the deployed daisysms-proxy function URL.");
+    }
+    proxied.search = url.search;
+    res = await fetchWithTimeout(proxied.toString(), 0, { "x-proxy-secret": proxySecret });
+  } else {
+    res = await fetchWithTimeout(url.toString());
+  }
   const body = (await res.text()).trim();
 
   // The handler API returns plain text for most actions and JSON for pricing.
@@ -96,8 +116,11 @@ async function call(params: Record<string, string | number | undefined>) {
     const endpoint = url.pathname === "/stubs/handler_api.php"
       ? "the DaisySMS API endpoint"
       : `the configured URL (${url.origin}${url.pathname})`;
+    const guidance = proxyUrl
+      ? "Requests are already routed through the daisysms-proxy Supabase Edge Function -- check that it's deployed, DAISYSMS_PROXY_SECRET matches on both sides, and DaisySMS/Cloudflare isn't now also blocking Supabase's network."
+      : "Set DAISYSMS_BASE_URL to https://daisysms.io/stubs/handler_api.php. If that value is already correct, DaisySMS may be serving a security challenge to this server (common for Vercel's shared IPs) -- set DAISYSMS_PROXY_URL to route through a Supabase Edge Function instead (see supabase/functions/daisysms-proxy), or have support allowlist this server.";
     throw new DaisySMSError(
-      `DaisySMS returned an HTML page instead of API data from ${endpoint}. Set DAISYSMS_BASE_URL to https://daisysms.io/stubs/handler_api.php. If that value is already correct, DaisySMS may be serving a security challenge to this server and support will need to allowlist it.`,
+      `DaisySMS returned an HTML page instead of API data from ${endpoint}. ${guidance}`,
       body.slice(0, 300)
     );
   }
@@ -111,11 +134,15 @@ async function call(params: Record<string, string | number | undefined>) {
  * already used for PocketFi (see src/lib/pocketfi.ts) so a stalled
  * request fails fast with a clear error instead of hanging the request
  * indefinitely. */
-async function fetchWithTimeout(url: string, attempt = 0): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  attempt = 0,
+  headers?: Record<string, string>
+): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(url, { cache: "no-store", signal: controller.signal });
+    return await fetch(url, { cache: "no-store", signal: controller.signal, headers });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const isTransient =
@@ -123,7 +150,7 @@ async function fetchWithTimeout(url: string, attempt = 0): Promise<Response> {
       (e.name === "AbortError" ||
         /connection reset|ECONNRESET|ETIMEDOUT|timeout/i.test(msg));
     if (isTransient && attempt === 0) {
-      return fetchWithTimeout(url, attempt + 1);
+      return fetchWithTimeout(url, attempt + 1, headers);
     }
     throw new DaisySMSError(
       e instanceof Error && e.name === "AbortError"
