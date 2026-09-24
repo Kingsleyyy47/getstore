@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getSettings } from "@/lib/settings";
 import SettingsForm from "@/components/SettingsForm";
 import ExchangeRateForm from "@/components/ExchangeRateForm";
@@ -5,7 +6,7 @@ import * as daisysms from "@/lib/daisysms";
 import * as daisysim from "@/lib/daisysim";
 import * as daisysim2 from "@/lib/daisysim2";
 import PageHeader from "@/components/PageHeader";
-import { IconSettings, IconWallet } from "@/components/icons";
+import { IconSettings, IconWallet, IconShieldAlert } from "@/components/icons";
 
 async function safeBalance(fn: () => Promise<number>): Promise<{ value: number | null; error: string | null }> {
   try {
@@ -52,6 +53,24 @@ export default async function AdminSettingsPage() {
         initialPocketfiBankProvider={settings.pocketfi_bank_provider}
         initialMarkupNaira={settings.markup_naira}
       />
+
+      <div className="card space-y-3 p-6">
+        <div className="label">Tools</div>
+        <Link
+          href="/admin/stock-repair"
+          className="flex items-center gap-3 rounded-lg border border-[var(--border)] p-3 text-sm transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
+            <IconShieldAlert size={18} />
+          </span>
+          <span>
+            <span className="block font-semibold">Stock Repair</span>
+            <span className="block text-xs text-[var(--text-muted)]">
+              Find and fix bulk-upload stock corrupted by the old delimiter bug, including already-sold accounts.
+            </span>
+          </span>
+        </Link>
+      </div>
     </div>
   );
 }
