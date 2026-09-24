@@ -12,9 +12,12 @@ interface SidebarItem {
 
 const customerItems: SidebarItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: <IconHome /> },
-  { href: "/dashboard/purchase", label: "USA & Canada", icon: <IconPhone /> },
-  { href: "/dashboard/us-numbers", label: "US Only", icon: <IconFlag /> },
-  { href: "/dashboard/countries", label: "All Countries", icon: <IconGlobe /> },
+  // USA & Canada, US Only, and All Countries used to each have their own
+  // sidebar entry -- they're now one "SMS" entry that lands on US Only
+  // (the most commonly used of the three), with a "Other Countries" link
+  // + modal on each of those three pages (see RegionSwitcher.tsx) for
+  // switching between them without coming back here.
+  { href: "/dashboard/us-numbers", label: "SMS", icon: <IconPhone /> },
   { href: "/dashboard/marketplace", label: "Marketplace", icon: <IconStore /> },
   { href: "/dashboard/logs", label: "History", icon: <IconList /> },
   { href: "/dashboard/wallet", label: "Wallet", icon: <IconWallet /> },
@@ -189,14 +192,6 @@ function IconClose() {
     </svg>
   );
 }
-function IconFlag() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M4 22V4" />
-      <path d="M4 4h14l-2.5 4L20 12H4" />
-    </svg>
-  );
-}
 function IconMessage() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -224,15 +219,6 @@ function IconPhone() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="7" y="2" width="10" height="20" rx="2" />
       <path d="M11 18h2" />
-    </svg>
-  );
-}
-function IconGlobe() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M2 12h20" />
-      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z" />
     </svg>
   );
 }

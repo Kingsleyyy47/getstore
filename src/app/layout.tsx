@@ -2,6 +2,16 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import PopupAnnouncement from "@/components/PopupAnnouncement";
+import AutoRefresh from "@/components/AutoRefresh";
+
+// Same source of truth as /api/build-version -- see that route for why
+// these particular env vars. Read once per server instance at render time
+// and compared against a live fetch on the client so stale tabs auto
+// hard-refresh after a new deploy.
+const BUILD_VERSION =
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  process.env.VERCEL_DEPLOYMENT_ID ||
+  String(Date.now());
 
 export const metadata: Metadata = {
   title: "GetStore",
@@ -38,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
+        <AutoRefresh buildVersion={BUILD_VERSION} />
         <Navbar />
         <PopupAnnouncement />
         <main>{children}</main>

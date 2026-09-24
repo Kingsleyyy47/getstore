@@ -5,6 +5,7 @@ import { getFavoriteServices } from "@/lib/favorites";
 import { formatNaira, type Wallet } from "@/lib/types";
 import PurchaseForm from "./PurchaseForm";
 import PageHeader from "@/components/PageHeader";
+import RegionSwitcher from "@/components/RegionSwitcher";
 import { IconPhone } from "@/components/icons";
 
 export default async function PurchasePage() {
@@ -32,25 +33,28 @@ export default async function PurchasePage() {
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <PageHeader
-        icon={<IconPhone />}
-        title="USA & Canada numbers"
-        subtitle={
-          <>
-            Enter the service shortcode (see{" "}
-            <a
-              className="text-brand hover:underline"
-              href="https://daisysms.io/services"
-              target="_blank"
-              rel="noreferrer"
-            >
-              the services list
-            </a>
-            ) and how much you're willing to pay. Your wallet balance:{" "}
-            <strong>{formatNaira(w?.balance_cents ?? 0)}</strong>
-          </>
-        }
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PageHeader
+          icon={<IconPhone />}
+          title="USA & Canada numbers"
+          subtitle={
+            <>
+              Enter the service shortcode (see{" "}
+              <a
+                className="text-brand hover:underline"
+                href="https://daisysms.io/services"
+                target="_blank"
+                rel="noreferrer"
+              >
+                the services list
+              </a>
+              ) and how much you're willing to pay. Your wallet balance:{" "}
+              <strong>{formatNaira(w?.balance_cents ?? 0)}</strong>
+            </>
+          }
+        />
+        <RegionSwitcher current="usa-canada" />
+      </div>
 
       <PurchaseForm
         favorites={favorites}

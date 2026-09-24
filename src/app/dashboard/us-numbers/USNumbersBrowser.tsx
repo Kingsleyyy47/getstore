@@ -4,6 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatNaira, type Rental } from "@/lib/types";
 import NeedHelp from "@/components/NeedHelp";
 import { IconCopy, IconCheck } from "@/components/icons";
+import { saveActiveRental, loadActiveRental, clearActiveRental } from "@/lib/rentalPersist";
+
+const STORAGE_KEY = "gs_active_rental_daisysim2";
+const AUTO_CLOSE_AFTER_RECEIVED_MS = 3 * 60 * 1000;
 
 interface Country {
   id: number | string;
@@ -49,6 +53,11 @@ export default function USNumbersBrowser({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [rental, setRental] = useState<Rental | null>(null);
+  // Whether the collapse under the active row is shown -- tapping the
+  // active row again toggles this without touching the rental itself, so
+  // the customer can close it and reopen it later and still see the same
+  // number/code.
+  const [expanded, setExpanded] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -109,6 +118,61 @@ export default function USNumbersBrowser({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // On mount, resume any rental that was already in progress -- covers the
+  // page reloading (e.g. iOS Safari discarding a backgrounded tab) while a
+  // customer was waiting on a code, so the dropdown reappears instead of
+  // looking like everything "cleared" and forcing a trip to History.
+  useEffect(() => {
+    (async () => {
+      const savedId = loadActiveRental(STORAGE_KEY);
+      if (!savedId) return;
+      try {
+        const res = await fetch(`/api/daisysim2/status?id=${savedId}`);
+        if (!res.ok) {
+          clearActiveRental(STORAGE_KEY);
+          return;
+        }
+        const json = await res.json();
+        const r: Rental | undefined = json.rental;
+        if (!r) {
+          clearActiveRental(STORAGE_KEY);
+          return;
+        }
+        if (r.status === "cancelled" || r.status === "expired" || r.status === "done") {
+          clearActiveRental(STORAGE_KEY);
+          return;
+        }
+        if (r.status === "received") {
+          const receivedAt = new Date(r.updated_at).getTime();
+          if (Date.now() - receivedAt >= AUTO_CLOSE_AFTER_RECEIVED_MS) {
+            clearActiveRental(STORAGE_KEY);
+            return;
+          }
+        }
+        setRental(r);
+        setPendingCode(r.service);
+        setExpanded(true);
+        if (r.status === "waiting") startPolling(r.id);
+      } catch {
+        // Network hiccup -- worst case the customer checks History, same
+        // as before this restore existed.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-close the collapse 3 minutes after a code has been received -- the
+  // number/code stay reachable in History (already written server-side),
+  // this just frees the row back up.
+  useEffect(() => {
+    if (rental?.status !== "received") return;
+    const receivedAt = new Date(rental.updated_at).getTime();
+    const remaining = receivedAt + AUTO_CLOSE_AFTER_RECEIVED_MS - Date.now();
+    const t = setTimeout(hardClear, Math.max(0, remaining));
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rental?.status, rental?.updated_at]);
+
   async function loadApps(countryId: Country["id"]) {
     setLoadingApps(true);
     setApps([]);
@@ -129,6 +193,7 @@ export default function USNumbersBrowser({
     setBuying(true);
     setError(null);
     setInfo(null);
+    setExpanded(true);
 
     const res = await fetch("/api/daisysim2/purchase", {
       method: "POST",
@@ -149,6 +214,7 @@ export default function USNumbersBrowser({
     }
 
     setRental(json.rental);
+    saveActiveRental(STORAGE_KEY, json.rental.id);
     startPolling(json.rental.id);
   }
 
@@ -184,12 +250,23 @@ export default function USNumbersBrowser({
     }
   }
 
-  function closeCollapse() {
+  // Hides the collapse WITHOUT discarding the rental -- tapping the row
+  // again brings it right back, same number and code, no re-buy.
+  function hidePanel() {
+    setExpanded(false);
+  }
+
+  // Fully discards the active rental (error dismissal, or the 3-minutes-
+  // after-received auto-clear) -- the row goes back to its normal,
+  // buyable state, and the number/code remain reachable in History.
+  function hardClear() {
     if (pollRef.current) clearInterval(pollRef.current);
     setRental(null);
     setPendingCode(null);
     setError(null);
     setInfo(null);
+    setExpanded(true);
+    clearActiveRental(STORAGE_KEY);
   }
 
   if (loadingCountry) {
@@ -208,7 +285,7 @@ export default function USNumbersBrowser({
             <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
               {error}
             </div>
-            <button className="btn-ghost h-9 px-3 text-sm" onClick={closeCollapse}>
+            <button className="btn-ghost h-9 px-3 text-sm" onClick={hardClear}>
               Close
             </button>
           </div>
@@ -248,7 +325,7 @@ export default function USNumbersBrowser({
                 : "Cancel & refund"}
             </button>
           )}
-          <button className="btn-ghost h-9 px-3 text-sm" onClick={closeCollapse}>
+          <button className="btn-ghost h-9 px-3 text-sm" onClick={hidePanel}>
             Close
           </button>
         </div>
@@ -256,6 +333,18 @@ export default function USNumbersBrowser({
         <NeedHelp whatsappUrl={whatsappUrl} telegramUrl={telegramUrl} />
       </div>
     );
+  }
+
+  // Tapping an app buys it immediately. Tapping the row that's ALREADY
+  // active just toggles the collapse open or closed again, it never
+  // re-buys.
+  function handleRowTap(a: App) {
+    if (a.code === activeCode) {
+      if (!rental) return; // still mid-purchase, nothing to toggle yet
+      setExpanded((v) => !v);
+      return;
+    }
+    buy(a);
   }
 
   return (
@@ -287,8 +376,8 @@ export default function USNumbersBrowser({
               <div key={a.code}>
                 <button
                   type="button"
-                  onClick={() => buy(a)}
-                  disabled={buying || Boolean(rental && rental.status === "waiting")}
+                  onClick={() => handleRowTap(a)}
+                  disabled={a.code !== activeCode && (buying || Boolean(rental && rental.status === "waiting"))}
                   className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                     isActive ? "border-brand bg-brand/5" : "border-[var(--border)] hover:bg-black/5 dark:hover:bg-white/5"
                   }`}
@@ -302,7 +391,7 @@ export default function USNumbersBrowser({
                     {isPending && <span className="text-xs text-[var(--text-muted)]">Buying...</span>}
                   </span>
                 </button>
-                {isActive && renderCollapse()}
+                {isActive && expanded && renderCollapse()}
               </div>
             );
           })}

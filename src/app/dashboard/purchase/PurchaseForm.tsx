@@ -4,6 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatNaira, type Rental } from "@/lib/types";
 import NeedHelp from "@/components/NeedHelp";
 import { IconCopy, IconCheck } from "@/components/icons";
+import { saveActiveRental, loadActiveRental, clearActiveRental } from "@/lib/rentalPersist";
+
+const STORAGE_KEY = "gs_active_rental_daisysms";
+const AUTO_CLOSE_AFTER_RECEIVED_MS = 3 * 60 * 1000;
 
 type Phase = "idle" | "renting" | "waiting" | "done" | "error";
 
@@ -33,6 +37,9 @@ export default function PurchaseForm({
   const [loadingServices, setLoadingServices] = useState(true);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [areas, setAreas] = useState("");
+  const [carrier, setCarrier] = useState("");
+  const [number, setNumber] = useState("");
   // The service code currently being rented or shown in the inline
   // collapse -- while a purchase is in flight this is set immediately
   // (so the tapped row can show a spinner), then stays in sync with
@@ -44,6 +51,11 @@ export default function PurchaseForm({
   const [extraBusy, setExtraBusy] = useState(false);
   const [extraInfo, setExtraInfo] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  // Whether the collapse under the active row is shown -- tapping the
+  // active row again toggles this without touching the rental itself, so
+  // the customer can close it and reopen it later and still see the same
+  // number/code.
+  const [expanded, setExpanded] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -64,6 +76,62 @@ export default function PurchaseForm({
     })();
   }, []);
 
+  // On mount, resume any rental that was already in progress -- covers the
+  // page reloading (e.g. iOS Safari discarding a backgrounded tab) while a
+  // customer was waiting on a code, so the dropdown reappears instead of
+  // looking like everything "cleared" and forcing a trip to History.
+  useEffect(() => {
+    (async () => {
+      const savedId = loadActiveRental(STORAGE_KEY);
+      if (!savedId) return;
+      try {
+        const res = await fetch(`/api/daisysms/status?id=${savedId}`);
+        if (!res.ok) {
+          clearActiveRental(STORAGE_KEY);
+          return;
+        }
+        const json = await res.json();
+        const r: Rental | undefined = json.rental;
+        if (!r) {
+          clearActiveRental(STORAGE_KEY);
+          return;
+        }
+        if (r.status === "cancelled" || r.status === "expired" || r.status === "done") {
+          clearActiveRental(STORAGE_KEY);
+          return;
+        }
+        if (r.status === "received") {
+          const receivedAt = new Date(r.updated_at).getTime();
+          if (Date.now() - receivedAt >= AUTO_CLOSE_AFTER_RECEIVED_MS) {
+            clearActiveRental(STORAGE_KEY);
+            return;
+          }
+        }
+        setRental(r);
+        setPendingCode(r.service);
+        setExpanded(true);
+        setPhase(r.status === "waiting" ? "waiting" : "done");
+        if (r.status === "waiting") startPolling(r.id);
+      } catch {
+        // Network hiccup -- worst case the customer checks History, same
+        // as before this restore existed.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-close the collapse 3 minutes after a code has been received -- the
+  // number/code stay reachable in History (already written server-side),
+  // this just frees the row back up.
+  useEffect(() => {
+    if (rental?.status !== "received") return;
+    const receivedAt = new Date(rental.updated_at).getTime();
+    const remaining = receivedAt + AUTO_CLOSE_AFTER_RECEIVED_MS - Date.now();
+    const t = setTimeout(closeCollapse, Math.max(0, remaining));
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rental?.status, rental?.updated_at]);
+
   // The code of the row the inline collapse belongs to -- keep it visible
   // even if it doesn't match the current search text, so buying one
   // doesn't make its own result appear to vanish.
@@ -74,6 +142,8 @@ export default function PurchaseForm({
     if (!q) return services;
     return services.filter((s) => s.code === activeCode || s.name.toLowerCase().includes(q));
   }, [services, search, activeCode]);
+
+  const hasRentalFilters = Boolean(areas.trim() || carrier || number.trim());
 
   useEffect(() => {
     return () => {
@@ -111,6 +181,7 @@ export default function PurchaseForm({
     setPendingCode(s.code);
     setError(null);
     setExtraInfo(null);
+    setExpanded(true);
     setPhase("renting");
 
     const res = await fetch("/api/daisysms/rent", {
@@ -118,7 +189,12 @@ export default function PurchaseForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         service: s.code,
-        maxPriceNaira: s.naira_cents / 100,
+        // DaisySMS adds 20% when an area, carrier, or exact number is
+        // requested. Keep the cap aligned with the price shown in the list.
+        maxPriceNaira: displayPriceCents(s) / 100,
+        areas: areas.trim() || undefined,
+        carriers: carrier || undefined,
+        number: number.trim() || undefined,
       }),
     });
     const json = await res.json();
@@ -130,6 +206,7 @@ export default function PurchaseForm({
     }
 
     setRental(json.rental);
+    saveActiveRental(STORAGE_KEY, json.rental.id);
     setPhase("waiting");
     startPolling(json.rental.id);
   }
@@ -176,13 +253,24 @@ export default function PurchaseForm({
     }
   }
 
+  // Hides the collapse WITHOUT discarding the rental -- tapping the row
+  // again brings it right back, same number and code, no re-buy.
+  function hidePanel() {
+    setExpanded(false);
+  }
+
+  // Fully discards the active rental (error dismissal, or the 3-minutes-
+  // after-received auto-clear) -- the row goes back to its normal,
+  // buyable state, and the number/code remain reachable in History.
   function closeCollapse() {
     if (pollRef.current) clearInterval(pollRef.current);
     setRental(null);
     setPendingCode(null);
     setError(null);
     setExtraInfo(null);
+    setExpanded(true);
     setPhase("idle");
+    clearActiveRental(STORAGE_KEY);
   }
 
   // "Get another code" on the SAME number, after one has already arrived --
@@ -295,7 +383,7 @@ export default function PurchaseForm({
               {extraBusy ? "Requesting..." : "Get another code"}
             </button>
           )}
-          <button className="btn-ghost h-9 px-3 text-sm" onClick={closeCollapse}>
+          <button className="btn-ghost h-9 px-3 text-sm" onClick={hidePanel}>
             Close
           </button>
         </div>
@@ -303,6 +391,18 @@ export default function PurchaseForm({
         <NeedHelp whatsappUrl={whatsappUrl} telegramUrl={telegramUrl} />
       </div>
     );
+  }
+
+  // Tapping a service buys it immediately. Tapping the row that's ALREADY
+  // active just toggles the collapse open or closed again, it never
+  // re-buys.
+  function handleRowTap(s: Service) {
+    if (s.code === activeCode) {
+      if (!rental) return; // still mid-purchase, nothing to toggle yet
+      setExpanded((v) => !v);
+      return;
+    }
+    buyService(s);
   }
 
   return (
@@ -319,6 +419,51 @@ export default function PurchaseForm({
             onChange={(e) => setSearch(e.target.value)}
           />
         )}
+        <details className="mb-3 rounded-lg border border-[var(--border)] px-3 py-2">
+          <summary className="cursor-pointer text-sm font-semibold">Rental filters</summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <label className="text-xs font-semibold text-[var(--text-muted)]">
+              Area codes
+              <input
+                className="input mt-1"
+                placeholder="212, 718"
+                value={areas}
+                onChange={(e) => setAreas(e.target.value)}
+                disabled={Boolean(rental && rental.status === "waiting") || phase === "renting"}
+              />
+            </label>
+            <label className="text-xs font-semibold text-[var(--text-muted)]">
+              Carrier
+              <select
+                className="input mt-1"
+                value={carrier}
+                onChange={(e) => setCarrier(e.target.value)}
+                disabled={Boolean(rental && rental.status === "waiting") || phase === "renting"}
+              >
+                <option value="">Any carrier</option>
+                <option value="tmo">T-Mobile</option>
+                <option value="vz">Verizon</option>
+                <option value="att">AT&amp;T</option>
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-[var(--text-muted)]">
+              Exact number
+              <input
+                className="input mt-1"
+                inputMode="numeric"
+                placeholder="11112223344"
+                value={number}
+                onChange={(e) => setNumber(e.target.value)}
+                disabled={Boolean(rental && rental.status === "waiting") || phase === "renting"}
+              />
+            </label>
+          </div>
+          {hasRentalFilters && (
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
+              Filtered rentals include DaisySMS&apos;s 20% provider surcharge.
+            </p>
+          )}
+        </details>
         {loadingServices && <p className="text-sm text-[var(--text-muted)]">Loading services...</p>}
         {!loadingServices && servicesError && <p className="text-sm text-red-400">{servicesError}</p>}
         {!loadingServices && !servicesError && services.length === 0 && (
@@ -335,8 +480,8 @@ export default function PurchaseForm({
               <div key={s.code}>
                 <button
                   type="button"
-                  onClick={() => buyService(s)}
-                  disabled={phase === "renting" || Boolean(rental && rental.status === "waiting")}
+                  onClick={() => handleRowTap(s)}
+                  disabled={s.code !== activeCode && (phase === "renting" || Boolean(rental && rental.status === "waiting"))}
                   className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                     isActive ? "border-brand bg-brand/5" : "border-[var(--border)] hover:bg-black/5 dark:hover:bg-white/5"
                   }`}
@@ -346,11 +491,11 @@ export default function PurchaseForm({
                     <span className="truncate">{s.name}</span>
                   </span>
                   <span className="flex items-center gap-2">
-                    <span className="font-bold text-[var(--text)]">{formatNaira(s.naira_cents)}</span>
+                    <span className="font-bold text-[var(--text)]">{formatNaira(displayPriceCents(s))}</span>
                     {isPending && <span className="text-xs text-[var(--text-muted)]">Buying...</span>}
                   </span>
                 </button>
-                {isActive && renderCollapse()}
+                {isActive && expanded && renderCollapse()}
               </div>
             );
           })}
@@ -358,6 +503,10 @@ export default function PurchaseForm({
       </div>
     </div>
   );
+
+  function displayPriceCents(service: Service): number {
+    return hasRentalFilters ? Math.ceil(service.naira_cents * 1.2) : service.naira_cents;
+  }
 }
 
 /** mm:ss elapsed, e.g. 75000ms -> "1:15". */

@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatNaira, type Rental } from "@/lib/types";
 import NeedHelp from "@/components/NeedHelp";
+import { IconCopy, IconCheck } from "@/components/icons";
+import { saveActiveRental, loadActiveRental, clearActiveRental } from "@/lib/rentalPersist";
+
+const STORAGE_KEY = "gs_active_rental_daisysim";
+const AUTO_CLOSE_AFTER_RECEIVED_MS = 3 * 60 * 1000;
 
 interface Country {
   id: number;
@@ -12,12 +17,6 @@ interface Service {
   code: string;
   name: string;
   is_favorite?: boolean;
-}
-interface Tier {
-  tier: number;
-  price: number;
-  available: number;
-  naira_cents: number;
 }
 
 export default function CountriesBrowser({
@@ -35,25 +34,36 @@ export default function CountriesBrowser({
   const countryBoxRef = useRef<HTMLDivElement>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [serviceSearch, setServiceSearch] = useState("");
-  const [serviceCode, setServiceCode] = useState("");
-  const [tiers, setTiers] = useState<Tier[]>([]);
-  const [selectedTier, setSelectedTier] = useState<number | null>(null);
   const [loadingServices, setLoadingServices] = useState(false);
-  const [loadingTiers, setLoadingTiers] = useState(false);
+  // The service code currently being bought or shown in the inline
+  // collapse -- set immediately on tap (so the tapped row can show a
+  // spinner) and kept in sync with rental.service once the rental comes
+  // back from the server.
+  const [pendingCode, setPendingCode] = useState<string | null>(null);
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [rental, setRental] = useState<Rental | null>(null);
+  // Whether the collapse under the active row is shown -- tapping the
+  // active row again toggles this without touching the rental itself, so
+  // the customer can close it and reopen it later and still see the same
+  // number/code.
+  const [expanded, setExpanded] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      if (tickRef.current) clearInterval(tickRef.current);
-    };
-  }, []);
+  const activeCode = rental?.service ?? pendingCode;
+
+  const filteredServices = useMemo(() => {
+    const q = serviceSearch.trim().toLowerCase();
+    if (!q) return services;
+    return services.filter((s) => s.code === activeCode || s.name.toLowerCase().includes(q));
+  }, [services, serviceSearch, activeCode]);
+
+  const filteredCountries = countries.filter((c) =>
+    c.name.toLowerCase().includes(countryQuery.trim().toLowerCase())
+  );
 
   // Close the country combobox dropdown when clicking anywhere outside it.
   useEffect(() => {
@@ -66,16 +76,16 @@ export default function CountriesBrowser({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Drives the "you can cancel in Xs" countdown below -- ticks once a
-  // second only while there's a rental waiting on a code.
+  // Drives the countdown/elapsed timer in the collapse -- ticks once a
+  // second whenever there's a rental in play.
   useEffect(() => {
-    if (rental?.status === "waiting") {
+    if (rental) {
       tickRef.current = setInterval(() => setNow(Date.now()), 1000);
       return () => {
         if (tickRef.current) clearInterval(tickRef.current);
       };
     }
-  }, [rental?.status]);
+  }, [rental]);
 
   // Customers can cancel & refund 3 minutes after buying if no code has
   // arrived; if nobody cancels, it's auto-cancelled and refunded after 7
@@ -84,14 +94,87 @@ export default function CountriesBrowser({
   const cancellableInMs = rental
     ? Math.max(0, new Date(rental.created_at).getTime() + 3 * 60 * 1000 - now)
     : 0;
+  const elapsedMs = rental ? Math.max(0, now - new Date(rental.created_at).getTime()) : 0;
+
+  // The collapse auto-closes 3 minutes after a code has been received --
+  // the number/code stay looked-up-able in History (they're already
+  // written to the rentals table server-side), this just frees the row
+  // back up so the customer can buy that service again if they want to.
+  useEffect(() => {
+    if (rental?.status !== "received") return;
+    const receivedAt = new Date(rental.updated_at).getTime();
+    const remaining = receivedAt + AUTO_CLOSE_AFTER_RECEIVED_MS - Date.now();
+    const t = setTimeout(hardClear, Math.max(0, remaining));
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rental?.status, rental?.updated_at]);
+
+  // On mount, resume any rental that was already in progress -- covers the
+  // page reloading (e.g. iOS Safari discarding a backgrounded tab) while a
+  // customer was waiting on a code, so the dropdown reappears instead of
+  // looking like everything "cleared".
+  useEffect(() => {
+    (async () => {
+      const savedId = loadActiveRental(STORAGE_KEY);
+      if (!savedId) return;
+      try {
+        const res = await fetch(`/api/daisysim/status?id=${savedId}`);
+        if (!res.ok) {
+          clearActiveRental(STORAGE_KEY);
+          return;
+        }
+        const json = await res.json();
+        const r: Rental | undefined = json.rental;
+        if (!r) {
+          clearActiveRental(STORAGE_KEY);
+          return;
+        }
+        if (r.status === "cancelled" || r.status === "expired" || r.status === "done") {
+          clearActiveRental(STORAGE_KEY);
+          return;
+        }
+        if (r.status === "received") {
+          const receivedAt = new Date(r.updated_at).getTime();
+          if (Date.now() - receivedAt >= AUTO_CLOSE_AFTER_RECEIVED_MS) {
+            clearActiveRental(STORAGE_KEY);
+            return;
+          }
+        }
+
+        setRental(r);
+        setPendingCode(r.service);
+        setExpanded(true);
+
+        // Best-effort: also restore the country picker + service list so
+        // the collapse has a row to sit under, same as a fresh purchase.
+        const match = countries.find((c) => c.name === r.country);
+        if (match) {
+          setCountryQuery(match.name);
+          setCountryId(String(match.id));
+          setLoadingServices(true);
+          const svcRes = await fetch(`/api/daisysim/services?countryId=${match.id}`);
+          const svcJson = await svcRes.json();
+          setLoadingServices(false);
+          if (svcRes.ok) setServices(svcJson.services ?? []);
+        }
+
+        if (r.status === "waiting") startPolling(r.id);
+      } catch {
+        // Network hiccup -- worst case the customer checks History, same
+        // as before this restore existed.
+      }
+    })();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (tickRef.current) clearInterval(tickRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSelectCountry(id: string) {
     setCountryId(id);
     setServices([]);
     setServiceSearch("");
-    setServiceCode("");
-    setTiers([]);
-    setSelectedTier(null);
     setError(null);
     if (!id) return;
 
@@ -106,42 +189,49 @@ export default function CountriesBrowser({
     setServices(json.services);
   }
 
-  async function onSelectService(code: string) {
-    setServiceCode(code);
-    setTiers([]);
-    setSelectedTier(null);
-    setError(null);
-    if (!code) return;
-
-    setLoadingTiers(true);
-    const res = await fetch("/api/daisysim/prices", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ country: Number(countryId), service: code }),
-    });
-    const json = await res.json();
-    setLoadingTiers(false);
-    if (!res.ok) {
-      setError(json.error ?? "Failed to load prices");
-      return;
-    }
-    setTiers(json.tiers);
+  function selectCountry(c: Country) {
+    setCountryQuery(c.name);
+    setCountryOpen(false);
+    onSelectCountry(String(c.id));
   }
 
-  async function buy() {
-    if (!countryId || !serviceCode || selectedTier === null) return;
+  function handleCountryInputChange(value: string) {
+    setCountryQuery(value);
+    setCountryOpen(true);
+    // Typing again after a country was already picked -- clear the stale
+    // selection (and dependent service state) until they pick a new one
+    // from the dropdown.
+    if (countryId) onSelectCountry("");
+  }
+
+  // Tapping a service buys it immediately at whichever tier is cheapest
+  // (the server picks it) -- no separate country/service/tier funnel.
+  // Tapping the row that's ALREADY active just toggles the collapse open
+  // or closed again, it never re-buys.
+  function handleRowTap(s: Service) {
+    if (s.code === activeCode) {
+      if (!rental) return; // still mid-purchase, nothing to toggle yet
+      setExpanded((v) => !v);
+      return;
+    }
+    buyService(s);
+  }
+
+  async function buyService(s: Service) {
+    if (!countryId || buying || (rental && rental.status === "waiting")) return;
+    setPendingCode(s.code);
     setBuying(true);
     setError(null);
+    setInfo(null);
+    setExpanded(true);
 
-    const serviceName = services.find((s) => s.code === serviceCode)?.name;
     const res = await fetch("/api/daisysim/purchase", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         country: Number(countryId),
-        service: serviceCode,
-        tier: selectedTier,
-        serviceName,
+        service: s.code,
+        serviceName: s.name,
       }),
     });
     const json = await res.json();
@@ -153,6 +243,7 @@ export default function CountriesBrowser({
     }
 
     setRental(json.rental);
+    saveActiveRental(STORAGE_KEY, json.rental.id);
     startPolling(json.rental.id);
   }
 
@@ -188,109 +279,95 @@ export default function CountriesBrowser({
     }
   }
 
-  function reset() {
+  // Hides the collapse WITHOUT discarding the rental -- tapping the row
+  // again brings it right back, same number and code, no re-buy.
+  function hidePanel() {
+    setExpanded(false);
+  }
+
+  // Fully discards the active rental (error dismissal, or the 3-minutes-
+  // after-received auto-clear) -- the row goes back to its normal, buyable
+  // state, and the number/code remain reachable in History from here on.
+  function hardClear() {
     if (pollRef.current) clearInterval(pollRef.current);
     setRental(null);
+    setPendingCode(null);
     setError(null);
     setInfo(null);
-    setCountryId("");
-    setCountryQuery("");
-    setCountryOpen(false);
-    setServices([]);
-    setServiceSearch("");
-    setServiceCode("");
-    setTiers([]);
-    setSelectedTier(null);
+    setExpanded(true);
+    clearActiveRental(STORAGE_KEY);
   }
 
-  // Keep the currently selected service visible even if it doesn't match
-  // the search text, so picking one doesn't make the <select> look empty.
-  const filteredServices = services.filter(
-    (s) => s.code === serviceCode || s.name.toLowerCase().includes(serviceSearch.trim().toLowerCase())
-  );
-
-  const filteredCountries = countries.filter((c) =>
-    c.name.toLowerCase().includes(countryQuery.trim().toLowerCase())
-  );
-
-  function selectCountry(c: Country) {
-    setCountryQuery(c.name);
-    setCountryOpen(false);
-    onSelectCountry(String(c.id));
-  }
-
-  function handleCountryInputChange(value: string) {
-    setCountryQuery(value);
-    setCountryOpen(true);
-    // Typing again after a country was already picked -- clear the stale
-    // selection (and dependent service/tier state) until they pick a new
-    // one from the dropdown.
-    if (countryId) onSelectCountry("");
-  }
-
-  if (rental) {
-    return (
-      <div className="card space-y-4 p-6">
-        <div>
-          <div className="text-sm text-[var(--text-muted)]">Rented number</div>
-          <div className="text-xl font-bold">+{rental.phone}</div>
-          <div className="text-sm text-[var(--text-muted)]">
-            {rental.service}
-            {rental.country ? ` · ${rental.country}` : ""} &middot; charged{" "}
-            {formatNaira(rental.price_cents)}
+  // Renders the inline panel that opens directly under whichever service
+  // row was tapped -- the number and (once it arrives) the code, each
+  // copyable, plus a live timer, instead of a separate full-page "rental"
+  // screen.
+  function renderCollapse() {
+    if (!rental) {
+      if (error) {
+        return (
+          <div className="mt-2 space-y-3 rounded-lg border border-red-500/30 bg-red-500/5 p-4">
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {error}
+            </div>
+            <button className="btn-ghost h-9 px-3 text-sm" onClick={hardClear}>
+              Close
+            </button>
           </div>
-        </div>
-
+        );
+      }
+      return null;
+    }
+    return (
+      <div className="mt-2 space-y-3 rounded-lg border border-brand/30 bg-brand/5 p-4">
         {info && (
-          <div className="rounded-lg border border-teal-500/30 bg-teal-500/10 px-4 py-3 text-sm text-teal-300">
+          <div className="rounded-lg border border-teal-500/30 bg-teal-500/10 px-3 py-2 text-sm text-teal-300">
             {info}
           </div>
         )}
         {error && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
             {error}
           </div>
         )}
 
-        <NeedHelp whatsappUrl={whatsappUrl} telegramUrl={telegramUrl} />
+        <CopyRow label="Number" value={`+${rental.phone}`} />
 
-        <div className="rounded-lg border border-[var(--border)] p-4">
-          {rental.status === "waiting" && (
-            <p className="text-sm text-[var(--text-muted)]">
-              Waiting for SMS... (checking every 5s). We'll auto-cancel and refund this if no code
-              arrives within 7 minutes.
-            </p>
-          )}
-          {rental.status === "received" && (
-            <div>
-              <div className="text-sm text-[var(--text-muted)]">Code received:</div>
-              <div className="text-2xl font-extrabold">{rental.code}</div>
-            </div>
-          )}
-          {rental.status === "cancelled" && (
-            <p className="text-sm text-red-300">Rental cancelled and refunded.</p>
-          )}
-        </div>
+        {rental.status === "waiting" && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
+            <span className="text-[var(--text-muted)]">Waiting for SMS...</span>
+            <span className="font-mono font-semibold text-[var(--text)]">{formatElapsed(elapsedMs)}</span>
+          </div>
+        )}
+        {rental.status === "received" && <CopyRow label="Code" value={rental.code ?? ""} highlight />}
+        {rental.status === "cancelled" && <p className="text-sm text-red-300">Rental cancelled and refunded.</p>}
 
-        <div className="flex gap-3">
+        <p className="text-xs text-[var(--text-muted)]">
+          Charged {formatNaira(rental.price_cents)}
+          {rental.country ? ` · ${rental.country}` : ""}
+        </p>
+
+        <div className="flex flex-wrap gap-2">
           {rental.status === "waiting" && (
-            <button className="btn-ghost" onClick={cancel} disabled={cancellableInMs > 0}>
+            <button className="btn-ghost h-9 px-3 text-sm" onClick={cancel} disabled={cancellableInMs > 0}>
               {cancellableInMs > 0
                 ? `Cancel in ${Math.ceil(cancellableInMs / 1000)}s`
                 : "Cancel & refund"}
             </button>
           )}
-          <button className="btn-ghost" onClick={reset}>
-            Buy another number
+          <button className="btn-ghost h-9 px-3 text-sm" onClick={hidePanel}>
+            Close
           </button>
         </div>
+
+        <NeedHelp whatsappUrl={whatsappUrl} telegramUrl={telegramUrl} />
       </div>
     );
   }
 
   return (
     <div className="card space-y-4 p-6">
-      {error && (
+      {error && !rental && !activeCode && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
@@ -337,9 +414,8 @@ export default function CountriesBrowser({
 
       {countryId && (
         <div>
-          <label className="label" htmlFor="service">
-            Service
-          </label>
+          <div className="label">Service</div>
+          <p className="mb-2 text-xs text-[var(--text-muted)]">Tap a service to buy it instantly.</p>
           {!loadingServices && services.length > 0 && (
             <input
               className="input mb-2"
@@ -349,67 +425,84 @@ export default function CountriesBrowser({
               onChange={(e) => setServiceSearch(e.target.value)}
             />
           )}
-          <select
-            className="input"
-            id="service"
-            value={serviceCode}
-            onChange={(e) => onSelectService(e.target.value)}
-            disabled={loadingServices}
-          >
-            <option value="">{loadingServices ? "Loading..." : "Choose a service"}</option>
-            {filteredServices.map((s) => (
-              <option key={s.code} value={s.code}>
-                {s.is_favorite ? "★ " : ""}
-                {s.name}
-              </option>
-            ))}
-          </select>
+          {loadingServices && <p className="text-sm text-[var(--text-muted)]">Loading services...</p>}
+          {!loadingServices && services.length === 0 && (
+            <p className="text-sm text-[var(--text-muted)]">No services available right now.</p>
+          )}
           {!loadingServices && services.length > 0 && filteredServices.length === 0 && (
-            <p className="mt-1 text-xs text-[var(--text-muted)]">No services match &quot;{serviceSearch}&quot;.</p>
+            <p className="text-sm text-[var(--text-muted)]">No services match &quot;{serviceSearch}&quot;.</p>
           )}
-        </div>
-      )}
-
-      {serviceCode && (
-        <div>
-          <div className="label">Price tier</div>
-          {loadingTiers && <p className="text-sm text-[var(--text-muted)]">Loading prices...</p>}
-          {!loadingTiers && tiers.length === 0 && (
-            <p className="text-sm text-[var(--text-muted)]">No tiers available right now.</p>
-          )}
-          <div className="space-y-2">
-            {tiers.map((t) => (
-              <label
-                key={t.tier}
-                className={`flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm transition-colors ${
-                  selectedTier === t.tier ? "border-brand bg-brand/5" : "border-[var(--border)]"
-                }`}
-              >
-                <span className="flex items-center gap-3">
-                  <input
-                    type="radio"
-                    name="tier"
-                    checked={selectedTier === t.tier}
-                    onChange={() => setSelectedTier(t.tier)}
-                  />
-                  Tier {t.tier}
-                </span>
-                <span className="flex items-center gap-3 text-[var(--text-muted)]">
-                  <span>{t.available} available</span>
-                  <span className="font-bold text-[var(--text)]">{formatNaira(t.naira_cents)}</span>
-                </span>
-              </label>
-            ))}
+          <div className="max-h-[32rem] space-y-2 overflow-y-auto">
+            {filteredServices.map((s) => {
+              const isActive = s.code === activeCode;
+              const isPending = isActive && buying && !rental;
+              return (
+                <div key={s.code}>
+                  <button
+                    type="button"
+                    onClick={() => handleRowTap(s)}
+                    disabled={s.code !== activeCode && (buying || Boolean(rental && rental.status === "waiting"))}
+                    className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                      isActive ? "border-brand bg-brand/5" : "border-[var(--border)] hover:bg-black/5 dark:hover:bg-white/5"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      {s.is_favorite && <span className="text-amber-500">★</span>}
+                      <span className="truncate">{s.name}</span>
+                    </span>
+                    {isPending && <span className="text-xs text-[var(--text-muted)]">Buying...</span>}
+                  </button>
+                  {isActive && expanded && renderCollapse()}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
+/** mm:ss elapsed, e.g. 75000ms -> "1:15". */
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+/** A labeled value with its own copy-to-clipboard icon button, used for the
+ * number and code inside the buy collapse. */
+function CopyRow({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard API unavailable -- value is still visible to select/copy manually
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2">
+      <div className="min-w-0">
+        <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</div>
+        <div className={`mt-0.5 truncate font-mono ${highlight ? "text-lg font-extrabold" : "font-semibold"}`}>
+          {value || "—"}
+        </div>
+      </div>
       <button
-        className="btn-primary w-full"
-        onClick={buy}
-        disabled={buying || selectedTier === null}
+        type="button"
+        onClick={copy}
+        aria-label={`Copy ${label}`}
+        disabled={!value}
+        className="shrink-0 rounded-lg p-2 text-[var(--text-muted)] hover:bg-black/5 hover:text-[var(--text)] disabled:opacity-40 dark:hover:bg-white/5"
       >
-        {buying ? "Buying..." : "Buy number"}
+        {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
       </button>
     </div>
   );

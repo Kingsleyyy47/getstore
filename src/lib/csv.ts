@@ -92,7 +92,12 @@ export type TxtFieldKey = (typeof DEFAULT_TXT_FIELD_ORDER)[number];
 /**
  * Parses a plain-text "combo list" for bulk account upload: one account per
  * line, fields separated by whichever of `:`, `|`, or a tab shows up in the
- * file (auto-detected from the first delimiter found across all lines).
+ * file. The delimiter is picked PER LINE, not once for the whole file --
+ * a combo list this messy often mixes lines that only make sense under
+ * different delimiters (a `:` inside one line's stray timestamp/URL/cookie
+ * shouldn't force every OTHER line, including genuinely `|`-delimited
+ * ones, to be parsed as colon-delimited too -- see DELIMITERS below and
+ * detectLineDelimiter).
  *
  * Fields are read positionally according to `fieldOrder` (defaults to
  * DEFAULT_TXT_FIELD_ORDER) -- different products ship with different field
@@ -102,10 +107,43 @@ export type TxtFieldKey = (typeof DEFAULT_TXT_FIELD_ORDER)[number];
  *
  * Only username/email (at least one) and password are required -- every
  * other field is optional and may be left blank, e.g. "user:pass:::::"
- * or simply "user:pass" with nothing after it. Any position beyond the end
- * of `fieldOrder` is ignored; any field in `fieldOrder` beyond the end of a
- * line is left blank.
+ * or simply "user:pass" with nothing after it. A line with MORE delimited
+ * segments than `fieldOrder` has slots for does NOT get its extra segments
+ * silently dropped (the old behavior) -- everything from the last
+ * configured field onward is rejoined (with the delimiter) into that one
+ * last field instead. This matters a lot for dumps that tack on a long
+ * cookie/session/token tail after the real fields -- that tail routinely
+ * contains many more of the very same delimiter character, so without this
+ * it would keep splitting past the real fields and scatter junk across
+ * whatever fields happen to come next (e.g. showing raw session cookie
+ * data mislabeled as "Recovery email"), instead of landing as one blob in
+ * the field the admin actually configured to hold it (e.g. a field_1/
+ * field_2 slot the admin has labeled "Cookie section" on the template).
  */
+const TXT_DELIMITERS = [":", "|", "\t"] as const;
+
+/** Picks whichever of `:`, `|`, `\t` this one line actually contains --
+ * checked in that priority order -- instead of asking "does ANY line in
+ * the whole file contain this" the way a file-wide check would. See the
+ * parseTxtCombo doc comment above for why that distinction matters. */
+function detectLineDelimiter(line: string): string {
+  return TXT_DELIMITERS.find((d) => line.includes(d)) ?? ":";
+}
+
+/** Splits `line` by `delimiter` into at most `maxParts` fields -- like
+ * Python's `str.split(delimiter, maxParts - 1)`. Everything from the
+ * `maxParts`-th segment onward is rejoined (with `delimiter`) into that
+ * final field rather than being split further or dropped, and the result
+ * is always padded to exactly `maxParts` entries. */
+export function splitWithRemainder(line: string, delimiter: string, maxParts: number): string[] {
+  const parts = line.split(delimiter);
+  if (parts.length <= maxParts) {
+    while (parts.length < maxParts) parts.push("");
+    return parts;
+  }
+  return [...parts.slice(0, maxParts - 1), parts.slice(maxParts - 1).join(delimiter)];
+}
+
 /**
  * For a combo list this short, the raw column count says more about what
  * it means than any configured (or default) field order: exactly one
@@ -126,9 +164,7 @@ export function resolveTxtFieldOrder(
     .filter((l) => l.length > 0);
   if (lines.length === 0) return [...configuredOrder];
 
-  const DELIMITERS = [":", "|", "\t"];
-  const delimiter = DELIMITERS.find((d) => lines.some((l) => l.includes(d))) ?? ":";
-  const columnCount = Math.max(...lines.map((l) => l.split(delimiter).length));
+  const columnCount = Math.max(...lines.map((l) => l.split(detectLineDelimiter(l)).length));
 
   if (columnCount === 1) return ["link"];
   if (columnCount === 2) return ["username", "password"];
@@ -146,11 +182,9 @@ export function parseTxtCombo(
     .filter((l) => l.length > 0);
   if (lines.length === 0) return [];
 
-  const DELIMITERS = [":", "|", "\t"];
-  const delimiter = DELIMITERS.find((d) => lines.some((l) => l.includes(d))) ?? ":";
-
   return lines.map((line) => {
-    const parts = line.split(delimiter).map((p) => p.trim());
+    const delimiter = detectLineDelimiter(line);
+    const parts = splitWithRemainder(line, delimiter, fieldOrder.length).map((p) => p.trim());
     const obj: Record<string, string> = {};
     fieldOrder.forEach((key, i) => {
       obj[key] = parts[i] ?? "";

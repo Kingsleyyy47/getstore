@@ -6,6 +6,44 @@ import { getServicePriceRow, computeEffectivePriceCents } from "@/lib/pricing";
 import { notifyAdmin } from "@/lib/adminNotifications";
 import * as daisysms from "@/lib/daisysms";
 
+const VALID_CARRIERS = new Set(["tmo", "vz", "att"]);
+
+function normalizeAreas(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const areas = value
+    .split(",")
+    .map((area) => area.trim())
+    .filter(Boolean);
+  if (areas.length === 0) return undefined;
+  if (areas.some((area) => !/^\d{3}$/.test(area))) {
+    throw new Error("Area codes must be 3 digits, separated by commas");
+  }
+  return areas.join(",");
+}
+
+function normalizeCarriers(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const carriers = value
+    .split(",")
+    .map((carrier) => carrier.trim().toLowerCase())
+    .filter(Boolean);
+  if (carriers.length === 0) return undefined;
+  if (carriers.some((carrier) => !VALID_CARRIERS.has(carrier))) {
+    throw new Error("Carrier must be T-Mobile, Verizon, or AT&T");
+  }
+  return carriers.join(",");
+}
+
+function normalizePhoneNumber(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const number = value.replace(/\D/g, "");
+  if (!number) return undefined;
+  if (number.length < 10 || number.length > 15) {
+    throw new Error("Phone number must be 10 to 15 digits");
+  }
+  return number;
+}
+
 export async function POST(req: Request) {
   const supabase = createClient();
   const {
@@ -25,6 +63,17 @@ export async function POST(req: Request) {
   // charged) -- convert it back to the USD base price DaisySMS itself
   // charges before we send it as max_price.
   const maxPriceNairaCap = body?.maxPriceNaira ? Number(body.maxPriceNaira) : undefined;
+  let areas: string | undefined;
+  let carriers: string | undefined;
+  let number: string | undefined;
+  try {
+    areas = normalizeAreas(body?.areas);
+    carriers = normalizeCarriers(body?.carriers);
+    number = normalizePhoneNumber(body?.number);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Invalid rental filters";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
 
   if (!service) {
     return NextResponse.json({ error: "service is required" }, { status: 400 });
@@ -65,7 +114,7 @@ export async function POST(req: Request) {
 
   let rental;
   try {
-    rental = await daisysms.getNumber({ service, maxPriceDollars: effectiveMaxPrice });
+    rental = await daisysms.getNumber({ service, maxPriceDollars: effectiveMaxPrice, areas, carriers, number });
   } catch (e) {
     // Business-logic errors (price too low, nothing in stock, too many
     // active rentals) are genuinely about this request -- safe to show
@@ -89,7 +138,15 @@ export async function POST(req: Request) {
       type: "provider_error",
       title: "USA & Canada (DaisySMS) rental failed to confirm -- check DaisySMS's rental history",
       message: `${detail}\n\nThis customer was NOT charged in our system and saw a generic "couldn't rent" message. But this failure was in reading DaisySMS's response, not necessarily in the rental itself -- DaisySMS may have already rented a number and charged the platform balance for it before the response got lost. Check DaisySMS's dashboard/rental history for a "${service}" activation around this time; if one exists, either deliver it to the customer manually (see user info below) or cancel it there so the balance isn't wasted.`,
-      meta: { service, maxPriceDollars: effectiveMaxPrice, userId: user.id, userEmail: user.email ?? null },
+      meta: {
+        service,
+        maxPriceDollars: effectiveMaxPrice,
+        areas: areas ?? null,
+        carriers: carriers ?? null,
+        number: number ?? null,
+        userId: user.id,
+        userEmail: user.email ?? null,
+      },
     });
     return NextResponse.json(
       { error: "Couldn't rent a number right now. Please try again shortly." },

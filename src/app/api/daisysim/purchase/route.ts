@@ -21,11 +21,16 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const country = Number(body?.country);
   const service = String(body?.service ?? "").trim();
-  const tier = Number(body?.tier);
+  // Tier is now optional -- the client no longer makes the customer pick
+  // one, matching the "tap a service, buy instantly" flow the other two
+  // numbers pages already use. When omitted, we auto-pick the cheapest
+  // tier with stock below.
+  const rawTier = body?.tier;
+  const tier = rawTier === undefined || rawTier === null ? null : Number(rawTier);
   const serviceName = body?.serviceName ? String(body.serviceName) : undefined;
 
-  if (!country || !service || !Number.isFinite(tier)) {
-    return NextResponse.json({ error: "country, service, and tier are required" }, { status: 400 });
+  if (!country || !service) {
+    return NextResponse.json({ error: "country and service are required" }, { status: 400 });
   }
 
   // Admin-configured price override for this service in this country, if
@@ -55,7 +60,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  const selectedTier = freshPrices.tiers.find((t) => t.tier === tier);
+  type Tier = (typeof freshPrices.tiers)[number];
+  let selectedTier: Tier | undefined;
+  if (tier !== null && Number.isFinite(tier)) {
+    selectedTier = freshPrices.tiers.find((t) => t.tier === tier);
+  } else {
+    // Auto-pick the cheapest tier that still has stock (falling back to
+    // the cheapest tier overall if none report stock) so a single tap can
+    // buy without the customer ever seeing a tier list.
+    const withStock = freshPrices.tiers.filter((t) => t.available > 0);
+    const pool = withStock.length > 0 ? withStock : freshPrices.tiers;
+    for (const t of pool) {
+      if (!selectedTier || t.price < selectedTier.price) selectedTier = t;
+    }
+  }
   if (!selectedTier) {
     return NextResponse.json({ error: "That price tier is no longer available. Please refresh and try again." }, { status: 410 });
   }

@@ -5,6 +5,7 @@ import { formatNaira, type Wallet } from "@/lib/types";
 import * as daisysim from "@/lib/daisysim";
 import CountriesBrowser from "./CountriesBrowser";
 import PageHeader from "@/components/PageHeader";
+import RegionSwitcher from "@/components/RegionSwitcher";
 import { IconGlobe } from "@/components/icons";
 
 export default async function CountriesPage() {
@@ -39,16 +40,19 @@ export default async function CountriesPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <PageHeader
-        icon={<IconGlobe />}
-        title="All Countries"
-        subtitle={
-          <>
-            Pick a country and service to see live price tiers. Wallet balance:{" "}
-            <strong>{formatNaira(w?.balance_cents ?? 0)}</strong>
-          </>
-        }
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PageHeader
+          icon={<IconGlobe />}
+          title="All Countries"
+          subtitle={
+            <>
+              Pick a country, then tap a service to buy a number instantly. Wallet balance:{" "}
+              <strong>{formatNaira(w?.balance_cents ?? 0)}</strong>
+            </>
+          }
+        />
+        <RegionSwitcher current="all-countries" />
+      </div>
 
       {loadError ? (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">

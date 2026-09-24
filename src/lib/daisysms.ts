@@ -6,7 +6,37 @@ import "server-only";
  * into a Client Component.
  */
 
-const BASE_URL = process.env.DAISYSMS_BASE_URL ?? "https://daisysms.io/stubs/handler_api.php";
+const DEFAULT_BASE_URL = "https://daisysms.io/stubs/handler_api.php";
+
+/**
+ * Keep deployments resilient to an accidentally broad or legacy env value.
+ * DaisySMS's API is on daisysms.io, and the handler path is required; the
+ * public site root returns HTML and cannot answer API actions.
+ */
+function baseUrl(): string {
+  const configured = process.env.DAISYSMS_BASE_URL?.trim() || DEFAULT_BASE_URL;
+  let url: URL;
+
+  try {
+    url = new URL(configured);
+  } catch {
+    throw new DaisySMSError(
+      "Invalid DAISYSMS_BASE_URL. Use https://daisysms.io/stubs/handler_api.php"
+    );
+  }
+
+  if (url.hostname === "daisysms.com" || url.hostname === "www.daisysms.com") {
+    url.hostname = "daisysms.io";
+  }
+  if (url.hostname === "www.daisysms.io") {
+    url.hostname = "daisysms.io";
+  }
+  if (url.hostname === "daisysms.io" && (!url.pathname || url.pathname === "/")) {
+    url.pathname = "/stubs/handler_api.php";
+  }
+
+  return url.toString();
+}
 
 export class DaisySMSError extends Error {
   /**
@@ -29,40 +59,80 @@ function apiKey(): string {
   return key;
 }
 
+const REQUEST_TIMEOUT_MS = 12_000;
+
 async function call(params: Record<string, string | number | undefined>) {
-  const url = new URL(BASE_URL);
+  const url = new URL(baseUrl());
   url.searchParams.set("api_key", apiKey());
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined) url.searchParams.set(k, String(v));
   }
-  // Server-side fetch from a serverless function sends no User-Agent (or a
-  // bare "node" one) by default, which some sites' Cloudflare bot
-  // protection flags and answers with an HTML "Just a moment..." challenge
-  // page instead of the real API response -- a real browser-like header
-  // set avoids that for anything short of a full JS challenge.
-  const res = await fetch(url.toString(), {
-    cache: "no-store",
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      Accept: "*/*",
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-  });
+
+  // Previously this sent a spoofed desktop-Chrome User-Agent + Accept
+  // headers on the theory that a plain server fetch looks more bot-like to
+  // Cloudflare than a "real browser" one. In practice that's backwards: a
+  // server that CLAIMS to be Chrome 124 while its actual TLS/HTTP
+  // fingerprint (no cookies, no client hints, no JS execution, a
+  // datacenter IP) obviously isn't Chrome is a classic bot-detection red
+  // flag -- more suspicious than an honest, header-less request, which is
+  // exactly how a working reference DaisySMS integration on different
+  // infrastructure (Supabase Edge Functions, not Vercel) calls this same
+  // handler_api.php endpoint with zero custom headers and no Cloudflare
+  // issues. So: send a plain request, don't impersonate a browser.
+  const res = await fetchWithTimeout(url.toString());
   const body = (await res.text()).trim();
 
-  // If Cloudflare (or similar) intercepted the request with a challenge
-  // page, the body is HTML, not the plain "KEY:VALUE" or JSON text every
-  // DaisySMS endpoint actually returns -- surface that clearly instead of
-  // letting callers choke on it as if it were a normal API response.
-  if (body.startsWith("<!DOCTYPE") || body.startsWith("<html")) {
+  // The handler API returns plain text for most actions and JSON for pricing.
+  // If the configured URL points at the public site, or a security layer
+  // intercepts the request, the body is HTML instead. Do not describe every
+  // HTML response as Cloudflare: a wrong base URL is a common and fixable
+  // deployment error.
+  const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
+  const looksLikeHtml =
+    body.startsWith("<!DOCTYPE") ||
+    body.startsWith("<html") ||
+    (contentType.includes("text/html") && /<html[\s>]|<!doctype html/i.test(body.slice(0, 500)));
+  if (looksLikeHtml) {
+    const endpoint = url.pathname === "/stubs/handler_api.php"
+      ? "the DaisySMS API endpoint"
+      : `the configured URL (${url.origin}${url.pathname})`;
     throw new DaisySMSError(
-      "DaisySMS's API is currently blocking this request behind a security check (Cloudflare) instead of returning data. This isn't something a header change can always fix from our side -- if it keeps happening, DaisySMS support may need to allowlist this server. Try again shortly.",
+      `DaisySMS returned an HTML page instead of API data from ${endpoint}. Set DAISYSMS_BASE_URL to https://daisysms.io/stubs/handler_api.php. If that value is already correct, DaisySMS may be serving a security challenge to this server and support will need to allowlist it.`,
       body.slice(0, 300)
     );
   }
 
   return { body, headers: res.headers };
+}
+
+/** fetch with a hard timeout and one retry on a transient network error
+ * (connection reset / abort / timeout) -- mirrors the retry-once pattern
+ * of the reference integration above, and the same timeout-guard shape
+ * already used for PocketFi (see src/lib/pocketfi.ts) so a stalled
+ * request fails fast with a clear error instead of hanging the request
+ * indefinitely. */
+async function fetchWithTimeout(url: string, attempt = 0): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { cache: "no-store", signal: controller.signal });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const isTransient =
+      e instanceof Error &&
+      (e.name === "AbortError" ||
+        /connection reset|ECONNRESET|ETIMEDOUT|timeout/i.test(msg));
+    if (isTransient && attempt === 0) {
+      return fetchWithTimeout(url, attempt + 1);
+    }
+    throw new DaisySMSError(
+      e instanceof Error && e.name === "AbortError"
+        ? `DaisySMS did not respond within ${REQUEST_TIMEOUT_MS / 1000}s`
+        : `Failed to reach DaisySMS: ${msg}`
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export interface Rental {

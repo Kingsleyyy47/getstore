@@ -4,6 +4,7 @@ import { getSettings } from "@/lib/settings";
 import { formatNaira, type Wallet } from "@/lib/types";
 import USNumbersBrowser from "./USNumbersBrowser";
 import PageHeader from "@/components/PageHeader";
+import RegionSwitcher from "@/components/RegionSwitcher";
 import { IconFlag } from "@/components/icons";
 
 export default async function USNumbersPage() {
@@ -30,16 +31,19 @@ export default async function USNumbersPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <PageHeader
-        icon={<IconFlag />}
-        title="US Only"
-        subtitle={
-          <>
-            USA-only virtual numbers. Pick an app to see the live price. Wallet balance:{" "}
-            <strong>{formatNaira(w?.balance_cents ?? 0)}</strong>
-          </>
-        }
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PageHeader
+          icon={<IconFlag />}
+          title="US Only"
+          subtitle={
+            <>
+              USA-only virtual numbers. Pick an app to see the live price. Wallet balance:{" "}
+              <strong>{formatNaira(w?.balance_cents ?? 0)}</strong>
+            </>
+          }
+        />
+        <RegionSwitcher current="us-only" />
+      </div>
 
       <USNumbersBrowser whatsappUrl={settings.whatsapp_url} telegramUrl={settings.telegram_url} />
     </div>

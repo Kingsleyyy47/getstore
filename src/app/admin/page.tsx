@@ -6,6 +6,7 @@ import PageHeader from "@/components/PageHeader";
 import {
   IconHome,
   IconUsers,
+  IconUser,
   IconWallet,
   IconTag,
   IconBox,
@@ -13,6 +14,12 @@ import {
   IconShield,
   IconBell,
   IconSettings,
+  IconReceipt,
+  IconDownload,
+  IconBolt,
+  IconPhone,
+  IconHistory,
+  IconStore,
 } from "@/components/icons";
 
 function dayStartUTC(d: Date): Date {
@@ -30,7 +37,17 @@ export default async function AdminHomePage() {
     { count: pendingTopups },
     { count: topupsToday },
     { data: wallets },
-    { data: creditsToday },
+    { data: walletTxToday },
+    { data: allTopups },
+    { data: allPurchases },
+    { count: rentalsWaiting },
+    { count: rentalsWaitingToday },
+    { count: rentalsEver },
+    { count: rentalsToday },
+    { count: productsLive },
+    { count: productsAddedToday },
+    { count: marketplaceOrders },
+    { count: marketplaceOrdersToday },
   ] = await Promise.all([
     supabase.from("profiles").select("*", { count: "exact", head: true }),
     // "+N today" per card -- each one counts today's new rows for that same
@@ -46,18 +63,54 @@ export default async function AdminHomePage() {
       .select("*", { count: "exact", head: true })
       .gte("created_at", todayStart),
     supabase.from("wallets").select("balance_cents"),
-    // amount_cents is positive for a credit (topup/refund/positive
-    // adjustment) and negative for a debit (purchase) -- summing just the
-    // positive side gives "how much new money landed in wallets today".
+    // Every wallet_transactions row from today, in one query -- covers the
+    // "wallet balances held" delta (positive side), "active customers
+    // today" (distinct user_id), and today's slice of deposits/revenue
+    // below, instead of a separate round-trip per card.
+    supabase.from("wallet_transactions").select("user_id, type, amount_cents").gte("created_at", todayStart),
+    // All-time deposits and revenue need the full ledger, not just today --
+    // same "fetch rows, sum in JS" approach already used for `wallets`
+    // above. Fine at today's scale; move to a database-side sum/RPC if the
+    // ledger grows large enough for this to matter.
+    supabase.from("wallet_transactions").select("amount_cents").eq("type", "topup"),
+    supabase.from("wallet_transactions").select("amount_cents").eq("type", "purchase"),
+    // rentals spans all three number providers (daisysms/daisysim/daisysim2
+    // all write into this one table, see 004_daisysim.sql) so every rentals
+    // query here already covers every provider without a `provider` filter.
+    supabase.from("rentals").select("*", { count: "exact", head: true }).eq("status", "waiting"),
     supabase
-      .from("wallet_transactions")
-      .select("amount_cents")
-      .gt("amount_cents", 0)
+      .from("rentals")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "waiting")
       .gte("created_at", todayStart),
+    supabase.from("rentals").select("*", { count: "exact", head: true }),
+    supabase.from("rentals").select("*", { count: "exact", head: true }).gte("created_at", todayStart),
+    supabase.from("product_templates").select("*", { count: "exact", head: true }).eq("archived", false),
+    supabase
+      .from("product_templates")
+      .select("*", { count: "exact", head: true })
+      .eq("archived", false)
+      .gte("created_at", todayStart),
+    supabase.from("product_orders").select("*", { count: "exact", head: true }),
+    supabase.from("product_orders").select("*", { count: "exact", head: true }).gte("created_at", todayStart),
   ]);
 
   const totalHeldCents = (wallets ?? []).reduce((sum, w: any) => sum + (w.balance_cents ?? 0), 0);
-  const creditedTodayCents = (creditsToday ?? []).reduce((sum, t: any) => sum + (t.amount_cents ?? 0), 0);
+
+  const txToday = walletTxToday ?? [];
+  const creditedTodayCents = txToday
+    .filter((t: any) => t.amount_cents > 0)
+    .reduce((sum: number, t: any) => sum + t.amount_cents, 0);
+  const depositsTodayCents = txToday
+    .filter((t: any) => t.type === "topup")
+    .reduce((sum: number, t: any) => sum + t.amount_cents, 0);
+  const revenueTodayCents = txToday
+    .filter((t: any) => t.type === "purchase")
+    .reduce((sum: number, t: any) => sum + Math.abs(t.amount_cents), 0);
+  const activeCustomersToday = new Set(txToday.map((t: any) => t.user_id)).size;
+
+  const totalDepositsCents = (allTopups ?? []).reduce((sum: number, t: any) => sum + t.amount_cents, 0);
+  const totalRevenueCents = (allPurchases ?? []).reduce((sum: number, t: any) => sum + Math.abs(t.amount_cents), 0);
 
   const cards = [
     {
@@ -66,6 +119,13 @@ export default async function AdminHomePage() {
       today: `+${newCustomersToday ?? 0} users today`,
       icon: <IconUsers />,
       color: "bg-brand/10 text-brand",
+    },
+    {
+      label: "Active customers today",
+      value: activeCustomersToday,
+      today: `${activeCustomersToday > 0 ? "transacted" : "no activity"} today`,
+      icon: <IconUser />,
+      color: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
     },
     {
       label: "Pending top-ups",
@@ -78,8 +138,50 @@ export default async function AdminHomePage() {
       label: "Total wallet balances held",
       value: formatNaira(totalHeldCents),
       today: `+${formatNaira(creditedTodayCents)} today`,
-      icon: <IconReceiptIcon />,
+      icon: <IconReceipt />,
       color: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+    },
+    {
+      label: "Total deposits (customers only)",
+      value: formatNaira(totalDepositsCents),
+      today: `+${formatNaira(depositsTodayCents)} today`,
+      icon: <IconDownload />,
+      color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    },
+    {
+      label: "Total revenue (all-time)",
+      value: formatNaira(totalRevenueCents),
+      today: `+${formatNaira(revenueTodayCents)} today`,
+      icon: <IconBolt />,
+      color: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+    },
+    {
+      label: "Rentals waiting for SMS",
+      value: rentalsWaiting ?? 0,
+      today: `+${rentalsWaitingToday ?? 0} today`,
+      icon: <IconPhone />,
+      color: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+    },
+    {
+      label: "Total rentals ever",
+      value: rentalsEver ?? 0,
+      today: `+${rentalsToday ?? 0} today`,
+      icon: <IconHistory />,
+      color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+    },
+    {
+      label: "Marketplace products live",
+      value: productsLive ?? 0,
+      today: `+${productsAddedToday ?? 0} added today`,
+      icon: <IconStore />,
+      color: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
+    },
+    {
+      label: "Marketplace orders",
+      value: marketplaceOrders ?? 0,
+      today: `+${marketplaceOrdersToday ?? 0} today`,
+      icon: <IconBox />,
+      color: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
     },
   ];
 
@@ -131,9 +233,9 @@ export default async function AdminHomePage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader icon={<IconHome />} title="Admin overview" />
+      <PageHeader icon={<IconHome />} title="Admin overview" subtitle="A quick snapshot of the whole platform." />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((c) => (
           <div key={c.label} className="card flex items-center gap-4 p-6">
             <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${c.color}`}>
@@ -167,14 +269,5 @@ export default async function AdminHomePage() {
         ))}
       </div>
     </div>
-  );
-}
-
-function IconReceiptIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M8 6h13M8 12h13M8 18h13" />
-      <path d="M3 6h.01M3 12h.01M3 18h.01" />
-    </svg>
   );
 }

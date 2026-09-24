@@ -17,7 +17,7 @@ import {
 interface Credentials {
   email: string | null;
   username: string | null;
-  password: string;
+  password: string | null;
   email_password: string | null;
   two_fa: string | null;
   recovery_email: string | null;
@@ -63,7 +63,7 @@ export default function OrderDetailsView({
   const fields: Field[] = [];
   if (credentials.email) fields.push({ label: "Email", value: credentials.email, isLink: false });
   if (credentials.username) fields.push({ label: "Username", value: credentials.username, isLink: false });
-  fields.push({ label: "Password", value: credentials.password, isLink: false });
+  if (credentials.password) fields.push({ label: "Password", value: credentials.password, isLink: false });
   if (credentials.email_password)
     fields.push({ label: "Email Password", value: credentials.email_password, isLink: false });
   if (credentials.two_fa) fields.push({ label: "2FA Code", value: credentials.two_fa, isLink: false });
@@ -98,6 +98,15 @@ export default function OrderDetailsView({
   if (credentials.link) fields.push({ label: "Login Link", value: credentials.link, isLink: true });
 
   const allText = fields.map((f) => `${f.label}: ${f.value}`).join("\n");
+  // The delivered stock row is the source of truth for an order. A product
+  // template may still have an old or incomplete format saved on it, while
+  // the actual account includes additional fields such as email and 2FA.
+  // Keep the template format as a fallback only when no credentials were
+  // populated on the delivered row.
+  const deliveredAccountFormat =
+    fields.length > 0
+      ? fields.map((field) => field.label).join(" : ")
+      : resolveAccountFormat(productName, bulkFormatFields, field1Label, field2Label);
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -147,7 +156,7 @@ export default function OrderDetailsView({
           Account Format
         </div>
         <code className="block break-words text-xs text-[var(--text-muted)]">
-          {resolveAccountFormat(productName, bulkFormatFields, field1Label, field2Label)}
+          {deliveredAccountFormat}
         </code>
       </div>
 
