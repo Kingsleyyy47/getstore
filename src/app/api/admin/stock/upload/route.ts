@@ -156,9 +156,14 @@ export async function POST(req: Request) {
     );
   }
 
-  const { error: insertErr, count } = await admin
+  // .select() so the response can show back a small sample of what actually
+  // landed in the real columns -- the admin asked for a post-upload check
+  // beyond the pre-upload parse preview, so this reflects what the DB
+  // actually stored, not just what the client-side parser predicted.
+  const { data: inserted, error: insertErr, count } = await admin
     .from("product_stock_items")
-    .insert(validRows, { count: "exact" });
+    .insert(validRows, { count: "exact" })
+    .select("username, email, password, two_fa, email_password, recovery_email, recovery_email_password, extra_field_1, extra_field_2, link");
 
   if (insertErr) {
     return NextResponse.json({ error: insertErr.message }, { status: 500 });
@@ -166,6 +171,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     inserted: count ?? validRows.length,
+    sample: (inserted ?? []).slice(0, 5),
     skipped: errors.length,
     errors,
   });

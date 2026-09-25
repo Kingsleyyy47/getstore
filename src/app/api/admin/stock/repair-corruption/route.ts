@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { splitWithRemainder } from "@/lib/csv";
 
 /**
  * One-off repair for stock items corrupted by the bulk-upload delimiter bug
@@ -19,13 +18,39 @@ import { splitWithRemainder } from "@/lib/csv";
  * This finds rows still carrying that exact signature -- one of the
  * "positional" fields holding 3+ literal `|` characters, something a real
  * username/password/2FA/email never has once parsing is correct -- and
- * rebuilds them: split that field on `|` into (username, password, two_fa,
- * email, <everything else>), write the first four into their real columns,
- * and put the remainder (the cookie/session tail, however long and however
- * many more `|` it contains) into extra_field_1 as one unsplit value.
- * email_password/recovery_email/recovery_email_password get cleared --
- * per the admin, those were never real values for these corrupted rows,
- * just leftover jargon from the old parse.
+ * rebuilds them.
+ *
+ * Only username and password are trusted by POSITION (always the first two
+ * `|`-separated pieces). Everything after that -- 2FA, email,
+ * email_password, recovery_email, and the cookie/session tail -- can appear
+ * in DIFFERENT ORDERS across different source combo lists (per the admin:
+ * cookie data can show up before or after the 2FA or email piece, and 2FA
+ * isn't always a fixed length), so it's classified in this priority order
+ * (see classifyRemainder):
+ *   1. "@" + a domain                 -> email (1st match), then
+ *                                        recovery_email (2nd match) --
+ *                                        checked first since it's the most
+ *                                        unambiguous shape there is.
+ *   2. starts with "key=" (c_user=,
+ *      xs=, fr=, datr=, ...)          -> a cookie fragment -- EVERY such
+ *                                        fragment gets glued back together
+ *                                        with `|`, wherever it falls on the
+ *                                        line, so a stray `|` inside the
+ *                                        cookie doesn't break it apart.
+ *   3. 2FA -- the piece immediately after password is trusted to be 2FA BY
+ *      POSITION (per the admin, that's true most of the time, whatever the
+ *      code looks like -- no length requirement). Only if THAT position was
+ *      already claimed by #1 or #2 above (meaning 2FA got displaced) does
+ *      it fall back to scanning the rest for something shaped like one
+ *      (uppercase letters/digits only, any length).
+ *   4. anything still left over        -> the first one is email_password
+ *                                          (the only remaining field that
+ *                                          looks like plain alphanumeric
+ *                                          text); anything past that is
+ *                                          treated as more cookie data
+ *                                          rather than guessed.
+ * recovery_email_password always gets cleared -- per the admin, these lines
+ * never carried a real value for it.
  *
  * GET previews what would change (no writes). POST applies it. Both scan
  * every row regardless of product template or sold/available status, per
@@ -95,18 +120,108 @@ interface RepairMatch {
   after: Record<string, string | null>;
 }
 
+// See the module doc comment above for what each of these matches and why.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// No length floor here -- 2FA codes aren't always 10+ characters, and this
+// is only used as a fallback SHAPE check anyway (see classifyRemainder: the
+// position right after password is trusted first).
+const TWO_FA_SHAPE_RE = /^[A-Z0-9]+$/;
+const COOKIE_START_RE = /^[a-zA-Z0-9_]+=/;
+
+interface ClassifiedFields {
+  twoFa: string | null;
+  email: string | null;
+  emailPassword: string | null;
+  recoveryEmail: string | null;
+  cookieTail: string | null;
+}
+
+function classifyRemainder(segments: string[]): ClassifiedFields {
+  const consumed = new Array(segments.length).fill(false);
+  let email: string | null = null;
+  let recoveryEmail: string | null = null;
+  const cookieIdx: number[] = [];
+
+  // Pass 1: the unambiguous, position-independent signals -- lock these in
+  // first regardless of where they fall on the line.
+  segments.forEach((seg, i) => {
+    if (!seg) {
+      consumed[i] = true;
+      return;
+    }
+    if (EMAIL_RE.test(seg)) {
+      if (!email) email = seg;
+      else if (!recoveryEmail) recoveryEmail = seg;
+      else cookieIdx.push(i); // a 3rd email-looking value -- safest bucket
+      consumed[i] = true;
+      return;
+    }
+    if (COOKIE_START_RE.test(seg)) {
+      cookieIdx.push(i);
+      consumed[i] = true;
+    }
+  });
+
+  // Pass 2: 2FA. Most combo lists put it right after password (segments[0]
+  // here, since username/password are already stripped off before this
+  // function is called) -- trust that position by default, whatever the
+  // code looks like. Only fall back to matching its SHAPE (uppercase
+  // letters/digits, any length) when that slot turned out to actually be
+  // email or cookie data instead.
+  let twoFa: string | null = null;
+  if (segments[0] && !consumed[0]) {
+    twoFa = segments[0];
+    consumed[0] = true;
+  } else {
+    const idx = segments.findIndex((seg, i) => !consumed[i] && seg && TWO_FA_SHAPE_RE.test(seg));
+    if (idx !== -1) {
+      twoFa = segments[idx];
+      consumed[idx] = true;
+    }
+  }
+
+  // Pass 3: whatever's left. The first is email_password (the only
+  // remaining field that looks like plain alphanumeric text); anything
+  // after that is treated as more cookie data rather than risking a wrong
+  // guess at a second field.
+  let emailPassword: string | null = null;
+  segments.forEach((seg, i) => {
+    if (consumed[i] || !seg) return;
+    if (!emailPassword) {
+      emailPassword = seg;
+      consumed[i] = true;
+      return;
+    }
+    cookieIdx.push(i);
+    consumed[i] = true;
+  });
+
+  const cookieTail =
+    cookieIdx.length > 0
+      ? cookieIdx
+          .sort((a, b) => a - b) // reassemble in the ORIGINAL line order
+          .map((i) => segments[i])
+          .join("|")
+      : null;
+
+  return { twoFa, email, emailPassword, recoveryEmail, cookieTail };
+}
+
 function reconstruct(row: StockRow): RepairMatch | null {
   const field = findCorruptedField(row);
   if (!field) return null;
 
   const raw = (row[field] as string | null) ?? "";
-  const [username, password, twoFa, email, cookieTail] = splitWithRemainder(raw, "|", 5).map((p) => p.trim());
+  const segments = raw.split("|").map((s) => s.trim());
+  const [username, password, ...rest] = segments;
 
   // Sanity guard -- if the first two real fields come out empty, this
   // probably isn't actually the bug pattern (just some value that happens
   // to contain a few pipes), so skip it rather than risk corrupting good
   // data further.
   if (!username || !password) return null;
+
+  const { twoFa, email, emailPassword, recoveryEmail, cookieTail } = classifyRemainder(rest);
 
   return {
     id: row.id,
@@ -126,8 +241,8 @@ function reconstruct(row: StockRow): RepairMatch | null {
       password,
       two_fa: twoFa || null,
       email: email || null,
-      email_password: null,
-      recovery_email: null,
+      email_password: emailPassword || null,
+      recovery_email: recoveryEmail || null,
       recovery_email_password: null,
       extra_field_1: cookieTail || null,
     },

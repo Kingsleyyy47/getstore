@@ -19,10 +19,24 @@ interface Template {
   field2Label: string | null;
 }
 
+interface StoredSampleRow {
+  username: string | null;
+  email: string | null;
+  password: string | null;
+  two_fa: string | null;
+  email_password: string | null;
+  recovery_email: string | null;
+  recovery_email_password: string | null;
+  extra_field_1: string | null;
+  extra_field_2: string | null;
+  link: string | null;
+}
+
 interface UploadResult {
   inserted: number;
   skipped: number;
   errors: { row: number; reason: string }[];
+  sample?: StoredSampleRow[];
 }
 
 interface CsvPreviewColumn {
@@ -70,6 +84,21 @@ export default function ScopedBulkUploadModal({
       : DEFAULT_TXT_FIELD_ORDER;
   const field1Label = template.field1Label || "field_1";
   const field2Label = template.field2Label || "field_2";
+
+  // What the post-upload "as stored" sample shows -- the actual DB row,
+  // not the client-side parse guess, so the admin can confirm the real
+  // columns landed right. extra_field_1 uses the template's own custom
+  // label (e.g. "Cookie section") when one's set.
+  const sampleColumns: { key: keyof StoredSampleRow; label: string }[] = [
+    { key: "username", label: "Username" },
+    { key: "email", label: "Email" },
+    { key: "password", label: "Password" },
+    { key: "two_fa", label: "2FA code" },
+    { key: "email_password", label: "Email password" },
+    { key: "recovery_email", label: "Recovery email" },
+    { key: "extra_field_1", label: field1Label },
+    { key: "link", label: "Link" },
+  ];
 
   const fieldLabels: Record<string, string> = {
     username: "Username",
@@ -189,7 +218,7 @@ export default function ScopedBulkUploadModal({
         )}
 
         {result && (
-          <div className="space-y-2 rounded-lg border border-teal-500/30 bg-teal-500/10 px-4 py-3 text-teal-300">
+          <div className="space-y-3 rounded-lg border border-teal-500/30 bg-teal-500/10 px-4 py-3 text-teal-300">
             <div>
               Uploaded {result.inserted} account{result.inserted === 1 ? "" : "s"}
               {result.skipped > 0 && `, skipped ${result.skipped} invalid row${result.skipped === 1 ? "" : "s"}`}.
@@ -204,6 +233,39 @@ export default function ScopedBulkUploadModal({
                 {result.errors.length > 10 && <li>...and {result.errors.length - 10} more</li>}
               </ul>
             )}
+
+            {result.sample && result.sample.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-xs font-semibold uppercase tracking-wide text-teal-200/80">
+                  As stored (first {result.sample.length})
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-teal-500/20">
+                  <table className="w-full text-left text-xs text-[var(--text)]">
+                    <thead className="bg-black/10">
+                      <tr>
+                        {sampleColumns.map((c) => (
+                          <th key={c.key} className="px-2 py-1.5 font-semibold">
+                            {c.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.sample.map((row, i) => (
+                        <tr key={i} className="border-t border-teal-500/20">
+                          {sampleColumns.map((c) => (
+                            <td key={c.key} className="max-w-[10rem] truncate px-2 py-1.5">
+                              {row[c.key] || <span className="text-[var(--text-muted)]">—</span>}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             <button className="btn-primary mt-2 w-full" type="button" onClick={onClose}>
               Done
             </button>
