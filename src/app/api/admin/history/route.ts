@@ -37,8 +37,18 @@ const KIND_CONFIG: Record<string, { table: string; select: string; filter?: [str
     filter: ["provider", "daisysim2"],
   },
   deposits: {
+    // wallet_transactions has TWO foreign keys into profiles (user_id, the
+    // depositor, and created_by, the staff member who recorded it) -- a
+    // bare "profiles!inner(email)" embed is ambiguous and PostgREST refuses
+    // to guess, which is what was throwing "Could not embed because more
+    // than one relationship was found for 'wallet_transactions' and
+    // 'profiles'" and showing an empty list. Naming the user_id foreign key
+    // explicitly (aliased back to "profiles" so the .ilike("profiles.email",
+    // ...) filter below still matches) picks the depositor's email, which is
+    // what this section is meant to show.
     table: "wallet_transactions",
-    select: "id, created_at, amount_cents, balance_after_cents, description, profiles!inner(email)",
+    select:
+      "id, created_at, amount_cents, balance_after_cents, description, profiles:profiles!wallet_transactions_user_id_fkey!inner(email)",
     filter: ["type", "topup"],
   },
 };
