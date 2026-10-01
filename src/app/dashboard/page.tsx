@@ -27,7 +27,8 @@ export default async function DashboardPage() {
       .select(
         "id, name, description, price_cents, available_count, category_id, image_url, bulk_format_fields, field_1_label, field_2_label, categories(name, logo_url, sort_order)"
       )
-      .eq("archived", false),
+      .eq("archived", false)
+      .not("category_id", "is", null),
     getProductLogoMap(),
   ]);
 

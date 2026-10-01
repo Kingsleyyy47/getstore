@@ -62,7 +62,15 @@ export default function USNumbersBrowser({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const activeCode = rental?.service ?? pendingCode;
+  // Older Getatext rentals stored service_name rather than api_name. Match
+  // either value so their number still opens under the right app on reload.
+  const activeApp = apps.find(
+    (a) =>
+      a.code === pendingCode ||
+      a.code === rental?.service ||
+      (rental && a.name.toLowerCase() === rental.service.toLowerCase())
+  );
+  const activeCode = activeApp?.code ?? pendingCode ?? rental?.service ?? null;
 
   const filteredApps = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -367,6 +375,19 @@ export default function USNumbersBrowser({
         )}
         {!loadingApps && apps.length > 0 && filteredApps.length === 0 && (
           <p className="text-sm text-[var(--text-muted)]">No apps match &quot;{search}&quot;.</p>
+        )}
+        {rental && !filteredApps.some((a) => a.code === activeCode) && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="flex w-full items-center justify-between rounded-lg border border-brand px-3 py-2 text-left text-sm font-semibold"
+            >
+              <span>Current rental · {rental.service}</span>
+              <span>{expanded ? "Hide" : "Show number"}</span>
+            </button>
+            {expanded && renderCollapse()}
+          </div>
         )}
         <div className="space-y-2">
           {filteredApps.map((a) => {

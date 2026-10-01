@@ -18,6 +18,7 @@ export default async function MarketplacePage() {
       .from("product_templates")
       .select("*, categories(name, logo_url, sort_order)")
       .eq("archived", false)
+      .not("category_id", "is", null)
       .order("created_at", { ascending: false }),
     getProductLogoMap(),
   ]);

@@ -20,6 +20,18 @@ export async function POST(req: Request) {
   const templateId = body?.templateId;
   if (!templateId) return NextResponse.json({ error: "templateId is required" }, { status: 400 });
 
+  // Deleting a category leaves its templates uncategorized in the database
+  // so existing orders keep their history. A stale checkout must not sell
+  // one of those hidden products (or an archived one).
+  const { data: template, error: templateError } = await supabase
+    .from("product_templates")
+    .select("id, category_id, archived")
+    .eq("id", templateId)
+    .maybeSingle();
+  if (templateError || !template || template.archived || !template.category_id) {
+    return NextResponse.json({ error: "That product is no longer available." }, { status: 404 });
+  }
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .rpc("purchase_product", { p_user_id: user.id, p_template_id: templateId })
