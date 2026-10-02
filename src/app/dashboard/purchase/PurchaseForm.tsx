@@ -40,8 +40,8 @@ export default function PurchaseForm({
   const [areas, setAreas] = useState("");
   const [carrier, setCarrier] = useState("");
   const [number, setNumber] = useState("");
-  // The service code currently being rented or shown in the inline
-  // collapse -- while a purchase is in flight this is set immediately
+  // The service code currently being rented or shown in the panel.
+  // While a purchase is in flight this is set immediately
   // (so the tapped row can show a spinner), then stays in sync with
   // rental.service once the rental comes back from the server.
   const [pendingCode, setPendingCode] = useState<string | null>(null);
@@ -51,13 +51,11 @@ export default function PurchaseForm({
   const [extraBusy, setExtraBusy] = useState(false);
   const [extraInfo, setExtraInfo] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  // Whether the collapse under the active row is shown -- tapping the
-  // active row again toggles this without touching the rental itself, so
-  // the customer can close it and reopen it later and still see the same
-  // number/code.
+  // The customer can hide and reopen the rental panel without rebuying.
   const [expanded, setExpanded] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rentalPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -132,7 +130,7 @@ export default function PurchaseForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rental?.status, rental?.updated_at]);
 
-  // The code of the row the inline collapse belongs to -- keep it visible
+  // The code of the row the rental panel belongs to -- keep it visible
   // even if it doesn't match the current search text, so buying one
   // doesn't make its own result appear to vanish.
   const activeCode = rental?.service ?? pendingCode;
@@ -171,6 +169,12 @@ export default function PurchaseForm({
     ? Math.max(0, new Date(rental.created_at).getTime() + 3 * 60 * 1000 - now)
     : 0;
   const elapsedMs = rental ? Math.max(0, now - new Date(rental.created_at).getTime()) : 0;
+
+  useEffect(() => {
+    if (rental?.id || phase === "error") {
+      rentalPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [rental?.id, phase]);
 
   // Tapping a service buys it immediately -- no separate "confirm" step.
   // The price cap is set to whatever price was shown for that service at
@@ -253,7 +257,7 @@ export default function PurchaseForm({
     }
   }
 
-  // Hides the collapse WITHOUT discarding the rental -- tapping the row
+  // Hides the panel WITHOUT discarding the rental -- tapping the row
   // again brings it right back, same number and code, no re-buy.
   function hidePanel() {
     setExpanded(false);
@@ -311,10 +315,7 @@ export default function PurchaseForm({
     startPolling(json.rental.id);
   }
 
-  // Renders the inline panel that opens directly under whichever service
-  // row was tapped -- the number and (once it arrives) the code, each
-  // copyable, plus a live timer instead of replacing the whole list with a
-  // separate "rental" screen.
+  // Renders the panel above the service list, with the number, code, and timer.
   function renderCollapse() {
     if (!rental) {
       // Rental failed outright (e.g. out of stock, price changed) -- no
@@ -400,6 +401,7 @@ export default function PurchaseForm({
     if (s.code === activeCode) {
       if (!rental) return; // still mid-purchase, nothing to toggle yet
       setExpanded((v) => !v);
+      rentalPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     buyService(s);
@@ -410,6 +412,9 @@ export default function PurchaseForm({
       <div>
         <div className="label">Service</div>
         <p className="mb-2 text-xs text-[var(--text-muted)]">Tap a service to rent it instantly.</p>
+        {rental?.status === "waiting" && (
+          <p className="mb-2 text-xs text-brand">Your number is in the current rental panel. Other services are paused while it waits for SMS.</p>
+        )}
         {!loadingServices && !servicesError && services.length > 0 && (
           <input
             className="input mb-2"
@@ -472,6 +477,21 @@ export default function PurchaseForm({
         {!loadingServices && !servicesError && services.length > 0 && filteredServices.length === 0 && (
           <p className="text-sm text-[var(--text-muted)]">No services match &quot;{search}&quot;.</p>
         )}
+        {(rental || phase === "error") && (
+          <div ref={rentalPanelRef} className="scroll-mt-24">
+            {rental && (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="flex w-full items-center justify-between rounded-lg border border-brand px-3 py-2 text-left text-sm font-semibold"
+              >
+                <span>Current rental · {services.find((s) => s.code === activeCode)?.name ?? rental.service}</span>
+                <span>{expanded ? "Hide" : "Show number"}</span>
+              </button>
+            )}
+            {expanded && renderCollapse()}
+          </div>
+        )}
         <div className="max-h-[32rem] space-y-2 overflow-y-auto">
           {filteredServices.map((s) => {
             const isActive = s.code === activeCode;
@@ -495,7 +515,6 @@ export default function PurchaseForm({
                     {isPending && <span className="text-xs text-[var(--text-muted)]">Buying...</span>}
                   </span>
                 </button>
-                {isActive && expanded && renderCollapse()}
               </div>
             );
           })}

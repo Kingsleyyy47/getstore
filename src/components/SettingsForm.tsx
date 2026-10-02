@@ -105,7 +105,7 @@ export default function SettingsForm({
       />
 
       <ToggleRow
-        title="Enable US Only (DaisySim API 2)"
+        title="Enable US Only (Getatext)"
         description="A separate, USA-only numbers provider. Pick an app to see the live price. When disabled, the US Only page is unavailable to customers."
         checked={usNumbersEnabled}
         onChange={setUsNumbersEnabled}

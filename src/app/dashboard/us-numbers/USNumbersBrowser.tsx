@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatNaira, type Rental } from "@/lib/types";
+import { formatNaira, formatUsPhone, type Rental } from "@/lib/types";
 import NeedHelp from "@/components/NeedHelp";
 import { IconCopy, IconCheck } from "@/components/icons";
 import { saveActiveRental, loadActiveRental, clearActiveRental } from "@/lib/rentalPersist";
@@ -45,7 +45,7 @@ export default function USNumbersBrowser({
   const [apps, setApps] = useState<App[]>([]);
   const [search, setSearch] = useState("");
   const [loadingApps, setLoadingApps] = useState(false);
-  // The app code currently being bought or shown in the inline collapse --
+  // The app code currently being bought or shown in the rental panel --
   // set immediately on tap (so the tapped row can show a spinner) and kept
   // in sync with rental.service once the rental comes back.
   const [pendingCode, setPendingCode] = useState<string | null>(null);
@@ -53,7 +53,7 @@ export default function USNumbersBrowser({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [rental, setRental] = useState<Rental | null>(null);
-  // Whether the collapse under the active row is shown -- tapping the
+  // Whether the rental panel is shown -- tapping the
   // active row again toggles this without touching the rental itself, so
   // the customer can close it and reopen it later and still see the same
   // number/code.
@@ -61,6 +61,7 @@ export default function USNumbersBrowser({
   const [now, setNow] = useState(() => Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rentalPanelRef = useRef<HTMLDivElement>(null);
 
   // Older Getatext rentals stored service_name rather than api_name. Match
   // either value so their number still opens under the right app on reload.
@@ -97,6 +98,12 @@ export default function USNumbersBrowser({
     ? Math.max(0, new Date(rental.created_at).getTime() + 3 * 60 * 1000 - now)
     : 0;
   const elapsedMs = rental ? Math.max(0, now - new Date(rental.created_at).getTime()) : 0;
+
+  useEffect(() => {
+    if (rental?.id || (error && activeCode)) {
+      rentalPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [rental?.id, error, activeCode]);
 
   useEffect(() => {
     (async () => {
@@ -142,6 +149,7 @@ export default function USNumbersBrowser({
         }
         const json = await res.json();
         const r: Rental | undefined = json.rental;
+        if (json.warning) setError(json.warning);
         if (!r) {
           clearActiveRental(STORAGE_KEY);
           return;
@@ -169,7 +177,7 @@ export default function USNumbersBrowser({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-close the collapse 3 minutes after a code has been received -- the
+  // Auto-close the panel 3 minutes after a code has been received -- the
   // number/code stay reachable in History (already written server-side),
   // this just frees the row back up.
   useEffect(() => {
@@ -232,6 +240,7 @@ export default function USNumbersBrowser({
       const res = await fetch(`/api/daisysim2/status?id=${rentalId}`);
       const json = await res.json();
       if (!res.ok) return;
+      setError(json.warning ?? null);
       setRental(json.rental);
       if (json.rental.status !== "waiting" && pollRef.current) {
         clearInterval(pollRef.current);
@@ -258,7 +267,7 @@ export default function USNumbersBrowser({
     }
   }
 
-  // Hides the collapse WITHOUT discarding the rental -- tapping the row
+  // Hides the panel WITHOUT discarding the rental -- tapping the row
   // again brings it right back, same number and code, no re-buy.
   function hidePanel() {
     setExpanded(false);
@@ -281,10 +290,7 @@ export default function USNumbersBrowser({
     return <div className="card p-6 text-sm text-[var(--text-muted)]">Loading...</div>;
   }
 
-  // Renders the inline panel that opens directly under whichever app row
-  // was tapped -- the number and (once it arrives) the code, each
-  // copyable, plus a live timer, instead of replacing the whole list with
-  // a separate "rental" screen.
+  // Renders the panel above the app list, with the number, code, and timer.
   function renderCollapse() {
     if (!rental) {
       if (error) {
@@ -314,7 +320,8 @@ export default function USNumbersBrowser({
           </div>
         )}
 
-        <CopyRow label="Number" value={`+${rental.phone}`} />
+        <CopyRow label="Number" value={formatUsPhone(rental.phone)} />
+        <p className="text-xs text-[var(--text-muted)]">Getatext rental ID: {rental.external_id}</p>
 
         {rental.status === "waiting" && (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
@@ -350,6 +357,7 @@ export default function USNumbersBrowser({
     if (a.code === activeCode) {
       if (!rental) return; // still mid-purchase, nothing to toggle yet
       setExpanded((v) => !v);
+      rentalPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     buy(a);
@@ -360,6 +368,9 @@ export default function USNumbersBrowser({
       <div>
         <div className="label">App</div>
         <p className="mb-2 text-xs text-[var(--text-muted)]">Tap an app to buy it instantly.</p>
+        {rental?.status === "waiting" && (
+          <p className="mb-2 text-xs text-brand">Your number is in the current rental panel. Other apps are paused while it waits for SMS.</p>
+        )}
         {!loadingApps && apps.length > 0 && (
           <input
             className="input mb-2"
@@ -376,16 +387,18 @@ export default function USNumbersBrowser({
         {!loadingApps && apps.length > 0 && filteredApps.length === 0 && (
           <p className="text-sm text-[var(--text-muted)]">No apps match &quot;{search}&quot;.</p>
         )}
-        {rental && !filteredApps.some((a) => a.code === activeCode) && (
-          <div>
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              className="flex w-full items-center justify-between rounded-lg border border-brand px-3 py-2 text-left text-sm font-semibold"
-            >
-              <span>Current rental · {rental.service}</span>
-              <span>{expanded ? "Hide" : "Show number"}</span>
-            </button>
+        {(rental || (error && activeCode)) && (
+          <div ref={rentalPanelRef} className="scroll-mt-24">
+            {rental && (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="flex w-full items-center justify-between rounded-lg border border-brand px-3 py-2 text-left text-sm font-semibold"
+              >
+                <span>Current rental · {activeApp?.name ?? rental.service}</span>
+                <span>{expanded ? "Hide" : "Show number"}</span>
+              </button>
+            )}
             {expanded && renderCollapse()}
           </div>
         )}
@@ -412,7 +425,6 @@ export default function USNumbersBrowser({
                     {isPending && <span className="text-xs text-[var(--text-muted)]">Buying...</span>}
                   </span>
                 </button>
-                {isActive && expanded && renderCollapse()}
               </div>
             );
           })}

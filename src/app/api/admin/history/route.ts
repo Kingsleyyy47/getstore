@@ -33,7 +33,7 @@ const KIND_CONFIG: Record<string, { table: string; select: string; filter?: [str
   },
   daisysim2: {
     table: "rentals",
-    select: "id, created_at, service, country, phone, price_cents, status, code, profiles!inner(email)",
+    select: "id, external_id, created_at, service, country, phone, price_cents, status, code, profiles!inner(email)",
     filter: ["provider", "daisysim2"],
   },
   deposits: {

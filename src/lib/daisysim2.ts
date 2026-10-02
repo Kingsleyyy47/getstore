@@ -197,8 +197,8 @@ export async function purchase(opts: {
   return {
     activation_id: String(data.id),
     phone_number: data.number,
-    // Rental rows must keep the catalog api_name: the buying UI matches
-    // rental.service against App.code to show the purchased number inline.
+    // Rental rows must keep the catalog api_name so the buying UI can
+    // identify the purchased app and its rental panel.
     service: opts.app,
     country: "USA",
     amount_charged: Number(data.price),

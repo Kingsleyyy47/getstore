@@ -35,25 +35,28 @@ export default function CountriesBrowser({
   const [services, setServices] = useState<Service[]>([]);
   const [serviceSearch, setServiceSearch] = useState("");
   const [loadingServices, setLoadingServices] = useState(false);
-  // The service code currently being bought or shown in the inline
-  // collapse -- set immediately on tap (so the tapped row can show a
-  // spinner) and kept in sync with rental.service once the rental comes
-  // back from the server.
+  // The service code currently being bought or shown in the rental panel.
   const [pendingCode, setPendingCode] = useState<string | null>(null);
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [rental, setRental] = useState<Rental | null>(null);
-  // Whether the collapse under the active row is shown -- tapping the
-  // active row again toggles this without touching the rental itself, so
-  // the customer can close it and reopen it later and still see the same
-  // number/code.
+  // The customer can hide and reopen the rental panel without rebuying.
   const [expanded, setExpanded] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rentalPanelRef = useRef<HTMLDivElement>(null);
 
-  const activeCode = rental?.service ?? pendingCode;
+  // Existing rentals may contain the provider's display name instead of
+  // the catalog code. Resolve either form when restoring a rental.
+  const activeService = services.find(
+    (s) =>
+      s.code === pendingCode ||
+      s.code === rental?.service ||
+      (rental && s.name.toLowerCase() === rental.service.toLowerCase())
+  );
+  const activeCode = activeService?.code ?? pendingCode ?? rental?.service ?? null;
 
   const filteredServices = useMemo(() => {
     const q = serviceSearch.trim().toLowerCase();
@@ -95,6 +98,14 @@ export default function CountriesBrowser({
     ? Math.max(0, new Date(rental.created_at).getTime() + 3 * 60 * 1000 - now)
     : 0;
   const elapsedMs = rental ? Math.max(0, now - new Date(rental.created_at).getTime()) : 0;
+
+  // The service list has its own scroll area. Bring the delivered number
+  // into view after a purchase or restored rental.
+  useEffect(() => {
+    if (rental?.id || (error && activeCode)) {
+      rentalPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [rental?.id, error, activeCode]);
 
   // The collapse auto-closes 3 minutes after a code has been received --
   // the number/code stay looked-up-able in History (they're already
@@ -145,8 +156,7 @@ export default function CountriesBrowser({
         setPendingCode(r.service);
         setExpanded(true);
 
-        // Best-effort: also restore the country picker + service list so
-        // the collapse has a row to sit under, same as a fresh purchase.
+        // Best-effort: restore the country picker and service list too.
         const match = countries.find((c) => c.name === r.country);
         if (match) {
           setCountryQuery(match.name);
@@ -206,12 +216,13 @@ export default function CountriesBrowser({
 
   // Tapping a service buys it immediately at whichever tier is cheapest
   // (the server picks it) -- no separate country/service/tier funnel.
-  // Tapping the row that's ALREADY active just toggles the collapse open
+  // Tapping the row that's ALREADY active just toggles the panel open
   // or closed again, it never re-buys.
   function handleRowTap(s: Service) {
     if (s.code === activeCode) {
       if (!rental) return; // still mid-purchase, nothing to toggle yet
       setExpanded((v) => !v);
+      rentalPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     buyService(s);
@@ -279,7 +290,7 @@ export default function CountriesBrowser({
     }
   }
 
-  // Hides the collapse WITHOUT discarding the rental -- tapping the row
+  // Hides the panel WITHOUT discarding the rental -- tapping the row
   // again brings it right back, same number and code, no re-buy.
   function hidePanel() {
     setExpanded(false);
@@ -298,10 +309,7 @@ export default function CountriesBrowser({
     clearActiveRental(STORAGE_KEY);
   }
 
-  // Renders the inline panel that opens directly under whichever service
-  // row was tapped -- the number and (once it arrives) the code, each
-  // copyable, plus a live timer, instead of a separate full-page "rental"
-  // screen.
+  // Renders the panel above the service list, with the number, code, and timer.
   function renderCollapse() {
     if (!rental) {
       if (error) {
@@ -412,10 +420,29 @@ export default function CountriesBrowser({
         )}
       </div>
 
+      {(rental || (error && activeCode)) && (
+        <div ref={rentalPanelRef} className="scroll-mt-24">
+          {rental && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="flex w-full items-center justify-between rounded-lg border border-brand px-3 py-2 text-left text-sm font-semibold"
+            >
+              <span>Current rental · {activeService?.name ?? rental.service}</span>
+              <span>{expanded ? "Hide" : "Show number"}</span>
+            </button>
+          )}
+          {expanded && renderCollapse()}
+        </div>
+      )}
+
       {countryId && (
         <div>
           <div className="label">Service</div>
           <p className="mb-2 text-xs text-[var(--text-muted)]">Tap a service to buy it instantly.</p>
+          {rental?.status === "waiting" && (
+            <p className="mb-2 text-xs text-brand">Your number is in the current rental panel. Other services are paused while it waits for SMS.</p>
+          )}
           {!loadingServices && services.length > 0 && (
             <input
               className="input mb-2"
@@ -452,7 +479,6 @@ export default function CountriesBrowser({
                     </span>
                     {isPending && <span className="text-xs text-[var(--text-muted)]">Buying...</span>}
                   </button>
-                  {isActive && expanded && renderCollapse()}
                 </div>
               );
             })}

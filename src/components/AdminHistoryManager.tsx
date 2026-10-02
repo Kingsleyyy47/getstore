@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { formatNaira } from "@/lib/types";
+import { formatNaira, formatUsPhone } from "@/lib/types";
 import {
   IconChevronDown,
   IconChevronRight,
@@ -183,11 +183,12 @@ function RentalRow({ r, kind }: { r: any; kind: "daisysms" | "daisysim" | "daisy
       <div className="min-w-0 break-words">
         <div className="font-semibold">
           {r.service}
-          {r.country ? ` · ${r.country}` : ""} &middot; +{r.phone}
+          {r.country ? ` · ${r.country}` : ""} &middot; {kind === "daisysim2" ? formatUsPhone(r.phone) : `+${r.phone}`}
         </div>
         <div className="text-[var(--text-muted)]">
           {r.profiles?.email ?? "—"} &middot; {rentalLabel(kind)} &middot;{" "}
           {new Date(r.created_at).toLocaleString()}
+          {kind === "daisysim2" && <> &middot; Getatext ID: {r.external_id}</>}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import * as daisysim2 from "@/lib/daisysim2";
 import { refundRental } from "@/lib/rentals";
+import { normalizeUsPhone } from "@/lib/types";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -35,14 +36,37 @@ export async function GET(req: Request) {
     result = await daisysim2.checkStatus(rental.external_id);
   } catch (e) {
     const message = e instanceof daisysim2.DaisySim2Error ? e.message : "Failed to check status";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ rental, warning: `Could not verify this rental with Getatext: ${message}` });
   }
+
+  // A provider dashboard may show a different active rental on the same
+  // account. Only compare numbers when Getatext confirms this rental's ID.
+  if (result.activation_id !== rental.external_id) {
+    return NextResponse.json({ rental, warning: "Getatext returned a different rental ID. Please contact support." });
+  }
+
+  const providerPhone = String(result.phone_number ?? "").trim();
+  const normalizedProviderPhone = normalizeUsPhone(providerPhone);
+  const storedPhone = normalizeUsPhone(rental.phone);
+  const correctedPhone = normalizedProviderPhone && normalizedProviderPhone !== storedPhone
+    ? providerPhone
+    : null;
+  const admin = createAdminClient();
 
   if (result.status === "Waiting") {
+    if (correctedPhone) {
+      const { data: updated, error: updateError } = await admin
+        .from("rentals")
+        .update({ phone: correctedPhone })
+        .eq("id", rentalId)
+        .eq("external_id", rental.external_id)
+        .select()
+        .single();
+      if (updateError) return NextResponse.json({ error: "Could not sync the provider number" }, { status: 500 });
+      return NextResponse.json({ rental: updated });
+    }
     return NextResponse.json({ rental });
   }
-
-  const admin = createAdminClient();
 
   if (result.status === "Completed") {
     const { data: updated } = await admin
@@ -50,6 +74,7 @@ export async function GET(req: Request) {
       .update({
         status: "received",
         code: result.code,
+        ...(correctedPhone ? { phone: correctedPhone } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq("id", rentalId)
@@ -66,7 +91,11 @@ export async function GET(req: Request) {
     // refunded twice.
     const { data: updated } = await admin
       .from("rentals")
-      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .update({
+        status: "cancelled",
+        ...(correctedPhone ? { phone: correctedPhone } : {}),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", rentalId)
       .eq("status", "waiting")
       .select()

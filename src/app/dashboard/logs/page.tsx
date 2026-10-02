@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatNaira, type Rental } from "@/lib/types";
+import { formatNaira, formatUsPhone, type Rental } from "@/lib/types";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { IconReceipt, IconPhone, IconStore, IconChevronRight } from "@/components/icons";
@@ -59,7 +59,7 @@ export default async function LogsPage() {
               <div className="min-w-0">
                 <div className="font-semibold break-words">
                   {r.service}
-                  {r.country ? ` · ${r.country}` : ""} &middot; +{r.phone}
+                  {r.country ? ` · ${r.country}` : ""} &middot; {r.provider === "daisysim2" ? formatUsPhone(r.phone) : `+${r.phone}`}
                 </div>
                 <div className="text-[var(--text-muted)]">
                   {r.provider === "daisysim"
@@ -68,6 +68,7 @@ export default async function LogsPage() {
                       ? "US Only"
                       : "USA & Canada"}{" "}
                   &middot; {new Date(r.created_at).toLocaleString()}
+                  {r.provider === "daisysim2" && <> &middot; Getatext ID: {r.external_id}</>}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">

@@ -108,7 +108,9 @@ export async function POST(req: Request) {
       user_id: user.id,
       provider: "daisysim",
       external_id: result.activation_id,
-      service: result.service,
+      // Keep the code used by the service list. The provider response may
+      // contain a display name, which cannot identify the active row.
+      service,
       country: result.country,
       phone: result.phone_number,
       price_cents: chargeNairaCents,

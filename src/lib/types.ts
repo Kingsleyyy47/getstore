@@ -141,3 +141,17 @@ export function formatCents(cents: number): string {
 export function formatNaira(cents: number): string {
   return `₦${(cents / 100).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+/** Getatext returns US numbers as either 10 digits or 1 + 10 digits. */
+export function normalizeUsPhone(value: string): string | null {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 10) return `1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return digits;
+  return null;
+}
+
+export function formatUsPhone(value: string): string {
+  const normalized = normalizeUsPhone(value);
+  if (normalized) return `+${normalized}`;
+  return value.startsWith("+") ? value : `+${value}`;
+}
